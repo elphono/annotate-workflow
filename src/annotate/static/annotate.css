@@ -1,0 +1,95 @@
+/* annotate overlay. Loaded twice: in the document (only .annotate-flash
+   applies there) and inside the overlay's shadow root (everything else). */
+
+.annotate-flash {
+  outline: 2px solid #f97316 !important;
+  outline-offset: 3px !important;
+  border-radius: 2px;
+}
+
+.layer, .bar {
+  --accent: #ea580c;
+  --accent-ink: #ffffff;
+  --sent: #64748b;
+  --paper: #ffffff;
+  --ink: #1f2937;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --danger: #b91c1c;
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+@media (prefers-color-scheme: dark) {
+  .layer, .bar {
+    --paper: #1f2430;
+    --ink: #e5e7eb;
+    --muted: #9ca3af;
+    --line: #374151;
+    --sent: #64748b;
+  }
+}
+
+.layer { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+
+.pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 24px; height: 24px; padding: 0 6px;
+  border-radius: 12px;
+  border: 2px solid #ffffff;
+  background: var(--accent); color: var(--accent-ink);
+  font: 700 12px/20px system-ui, sans-serif;
+  box-shadow: 0 1px 4px rgba(0,0,0,.35);
+  cursor: pointer;
+}
+.pin.sent { background: var(--sent); }
+.pin:hover { transform: translate(-50%, -50%) scale(1.15); }
+
+.bubble {
+  position: absolute; width: 320px; padding: 10px;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.bubble-head { font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.bubble-quote { font-style: italic; color: var(--muted); font-size: 12px;
+  max-height: 3.6em; overflow: hidden; margin-bottom: 6px; }
+.bubble-text { box-sizing: border-box; width: 100%; min-height: 76px; resize: vertical;
+  font: 14px/1.4 system-ui, sans-serif; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.bubble-actions, .bar-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+button {
+  font: 600 13px system-ui, sans-serif; cursor: pointer;
+  padding: 5px 10px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.danger { color: var(--danger); }
+
+.bar {
+  position: fixed; right: 16px; bottom: 16px; width: 300px; max-width: calc(100vw - 32px);
+  padding: 10px 12px; box-sizing: border-box;
+  background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.bar.collapsed { width: auto; }
+.bar-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.counts { font-weight: 700; }
+.toggle { padding: 0 6px; border: none; background: transparent; }
+.status { color: var(--muted); margin-top: 2px; }
+.status.busy { color: var(--accent); font-weight: 600; }
+.orphans { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line);
+  max-height: 160px; overflow: auto; }
+.orphans-title { font-size: 12px; font-weight: 700; color: var(--danger); }
+.orphan { font-size: 12px; padding: 3px 0; cursor: pointer; }
+.orphan.sent { color: var(--muted); }
+.orphan-num { font-weight: 700; }
+.orphan-quote { font-style: italic; color: var(--muted); }
+.message { margin-top: 8px; font-size: 12px; color: var(--accent); }
+.hint { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+@media (max-width: 480px) {
+  .bar { left: 16px; right: 16px; width: auto; }
+  .bubble { width: calc(100vw - 32px); }
+}
