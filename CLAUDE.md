@@ -99,6 +99,13 @@ copie du dépôt et exige que la suite tombe.
 - **Un envoi qui échoue est défait, pas rejoué** : le lot (identifié par son `sent_at`) redevient
   envoyable, et c'est l'utilisateur qui reclique. Un démon qui redémarre pendant une session
   défait de même le lot resté `sent` (`sender.recover_stale`).
+- **Un témoin de garde doit rester inoffensif quand la garde est désarmée** : c'est exactement
+  ce que fait la mutation. Le premier `test_suite_guards.py` appelait le vrai `explorer.exe` ;
+  la campagne du 2026-10-05 l'a lancé pour de bon. Les témoins sont désormais des exécutables
+  inertes qui portent le nom interdit.
+- **Une session lancée par un envoi suit les règles globales de l'utilisateur** : mesurée le
+  2026-10-05, elle a corrigé le fichier puis l'a commité d'elle-même (`acceptEdits` n'empêche
+  pas `git` quand les permissions l'autorisent). Avec un remote, elle poussera aussi.
 - Les sessions lancées par annotate portent `ANNOTATE_SESSION=1` ; le hook les ignore, sans quoi
   la session qui répond ré-enregistrerait le document qu'elle corrige.
 

@@ -2,8 +2,8 @@
 
 Each test trips one guard with an action that is HARMLESS if the guard were
 missing (signal 0 only checks permissions; a pid above pid_max does not
-exist; `claude --version` would merely print a version), so that a disarmed
-guard shows as a red test, never as a real side effect.
+exist; the forbidden programs are inert decoys carrying the forbidden name),
+so that a disarmed guard shows as a red test, never as a real side effect.
 """
 from __future__ import annotations
 
@@ -16,15 +16,27 @@ import pytest
 from annotate import config
 
 
-def test_a_real_claude_cannot_be_launched():
+def _decoy(folder: Path, name: str) -> str:
+    """An inert executable carrying a forbidden NAME. If the guard were
+    disarmed, this is what would run: nothing real, no window, no bill.
+    (A first version called the real `explorer.exe /c echo`; the mutation
+    campaign that disarmed the guard ran it for real on 2026-10-05.)"""
+    path = folder / name
+    path.write_text("#!/bin/sh\nexit 0\n")
+    path.chmod(0o755)
+    return str(path)
+
+
+def test_a_real_claude_cannot_be_launched(tmp_path):
     with pytest.raises(AssertionError, match="launches a real 'claude'"):
-        subprocess.run(["claude", "--version"], capture_output=True)
+        subprocess.run([_decoy(tmp_path, "claude"), "--version"], capture_output=True)
 
 
-def test_windows_programs_cannot_be_launched():
-    for program in ("cmd.exe", "powershell.exe", "wsl.exe", "explorer.exe"):
+def test_windows_programs_cannot_be_launched(tmp_path):
+    for program in ("cmd.exe", "powershell.exe", "wsl.exe", "explorer.exe",
+                    "reg.exe", "systemctl", "wslview"):
         with pytest.raises(AssertionError, match="launches a real"):
-            subprocess.Popen([program, "/c", "echo"])
+            subprocess.Popen([_decoy(tmp_path, program)])
 
 
 def test_killpg_is_refused():
