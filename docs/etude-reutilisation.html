@@ -183,6 +183,58 @@ tombe est ce qui servait l'appareil.</figcaption>
 <figcaption>Les étapes 2 et 7 sont automatiques ; l'utilisateur ne fait que 5 et 6. L'étape 7 tourne en
 arrière-plan : la page et la pastille montrent « session running » puis « answered ».</figcaption>
 </figure>
+<h3 id="session-ouverte">Si la session est encore ouverte dans un terminal</h3>
+<figure>
+<svg viewBox="0 0 900 230" role="img" aria-labelledby="live-t">
+  <title id="live-t">Aiguillage proposé de l'envoi : la session ouverte d'abord, la reprise en arrière-plan sinon</title>
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <g font-size="14">
+    <rect x="10" y="86" width="170" height="58" rx="9" fill="var(--paper)" stroke="var(--browser)" stroke-width="2"/>
+    <text x="24" y="110" class="svg-ink" font-weight="700">Send to session</text>
+    <text x="24" y="130" class="svg-muted">barre, pastille, CLI</text>
+
+    <rect x="226" y="86" width="260" height="58" rx="9" fill="var(--paper)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="240" y="110" class="svg-ink" font-weight="700">la session est-elle vivante</text>
+    <text x="240" y="130" class="svg-ink" font-weight="700">dans un terminal ?</text>
+
+    <rect x="530" y="14" width="360" height="74" rx="9" fill="var(--session-soft)" stroke="var(--session)" stroke-width="2"/>
+    <text x="544" y="38" fill="var(--session)" font-weight="700">oui · livrer à cette session (à faire)</text>
+    <text x="544" y="58" class="svg-ink">les notes arrivent dans le terminal ouvert,</text>
+    <text x="544" y="76" class="svg-ink">dans la conversation que l'utilisateur voit</text>
+
+    <rect x="530" y="142" width="360" height="74" rx="9" fill="var(--annotate-soft)" stroke="var(--annotate)" stroke-width="2"/>
+    <text x="544" y="166" fill="var(--annotate)" font-weight="700">non · claude -p --resume en arrière-plan</text>
+    <text x="544" y="186" class="svg-ink">aujourd'hui, c'est le cas de tout envoi :</text>
+    <text x="544" y="204" class="svg-ink">aucun terminal ouvert, une session sans écran</text>
+  </g>
+  <g stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#arr2)">
+    <path d="M180,115 L222,115"/>
+    <path d="M486,105 L526,58"/>
+    <path d="M486,125 L526,176"/>
+  </g>
+</svg>
+<figcaption>Aujourd'hui l'envoi n'ouvre aucun terminal, mais il ne regarde pas non plus si la session est
+ouverte : il lance à côté d'elle un second <code>claude</code> sur la même conversation. Le terminal ouvert
+ne voit ni les notes ni la correction.</figcaption>
+</figure>
+<div class="scroll">
+<table>
+<thead><tr><th>Pièce à construire</th><th>Mécanisme candidat</th><th>Ce qu'il en coûte, ce qui reste à mesurer</th></tr></thead>
+<tbody>
+<tr><td>Savoir qu'une session est vivante</td><td>hooks <code>SessionStart</code> / <code>SessionEnd</code> qui l'inscrivent au registre avec son pid ; le démon vérifie que le pid vit encore</td><td>deux hooks de plus, du même modèle que <code>register-on-write</code>. Une session tuée sans <code>SessionEnd</code> doit être reconnue morte (pid absent), pas crue vivante.</td></tr>
+<tr><td>Livrer sans attendre</td><td><em>channel</em> Claude Code : un serveur MCP qui pousse un message dans la session ouverte</td><td>fonction en aperçu, à vérifier : <code>--channels</code> n'apparaît pas dans <code>claude --help</code> sur cette machine. La session doit avoir été lancée avec ce serveur.</td></tr>
+<tr><td>Livrer au prochain tour</td><td>boîte aux lettres au registre + hook <code>UserPromptSubmit</code> qui injecte les notes en attente</td><td>bibliothèque standard seulement, mais passif : rien n'arrive tant que l'utilisateur ne tape rien dans le terminal.</td></tr>
+</tbody>
+</table>
+</div>
+<div class="verdict"><strong>Proposé — non codé.</strong> Aiguiller l'envoi sur la vivacité de la session :
+vivante, les notes lui sont livrées ; absente, la reprise en arrière-plan d'aujourd'hui reste le repli. Le
+choix entre <em>channel</em> (immédiat, en aperçu) et boîte aux lettres (simple, passive) est à trancher
+après avoir vérifié que les <em>channels</em> sont disponibles sur ce compte.</div>
 <figure>
 <svg viewBox="0 0 900 190" role="img" aria-labelledby="anchor-t">
   <title id="anchor-t">L'ancrage d'une épingle : sélecteur, citation, décalage</title>
@@ -206,6 +258,56 @@ arrière-plan : la page et la pastille montrent « session running » puis « an
 <figcaption>Si le document change et que le sélecteur ne désigne plus rien, la note n'est pas perdue : elle
 passe dans la liste « orphelines » de la barre, et part avec sa citation et la mention « Anchor: lost ».</figcaption>
 </figure>
+<h3 id="precision">L'ancre est parfois trop large pour dire ce que la note désigne</h3>
+<figure>
+<svg viewBox="0 0 900 230" role="img" aria-labelledby="prec-t">
+  <title id="prec-t">Ancre trop large aujourd'hui, ancre resserrée sur l'élément pointé demain</title>
+  <g font-size="14">
+    <text x="20" y="24" fill="var(--risk)" font-weight="700">Aujourd'hui · constaté sur la note #1 de cet envoi</text>
+    <rect x="20" y="38" width="420" height="120" rx="8" fill="none" stroke="var(--risk)" stroke-width="2" stroke-dasharray="6 4"/>
+    <rect x="36" y="54" width="110" height="34" rx="6" fill="var(--session-soft)"/>
+    <rect x="166" y="54" width="110" height="34" rx="6" fill="var(--annotate-soft)"/>
+    <rect x="296" y="54" width="128" height="34" rx="6" fill="var(--browser-soft)"/>
+    <rect x="36" y="108" width="150" height="34" rx="6" fill="var(--session-soft)"/>
+    <text x="46" y="130" class="svg-ink" font-size="13">7 · claude -p --resume</text>
+    <circle cx="176" cy="112" r="11" fill="var(--annotate)"/>
+    <text x="172" y="117" fill="#fff" font-size="12" font-weight="700">1</text>
+    <text x="20" y="182" class="svg-ink">ancre = le &lt;svg&gt; entier du schéma</text>
+    <text x="20" y="202" class="svg-muted">citation = ses 120 premiers caractères ;</text>
+    <text x="20" y="220" class="svg-muted">la session doit deviner l'endroit visé</text>
+
+    <text x="470" y="24" fill="var(--keep)" font-weight="700">Proposé · l'élément sous le clic</text>
+    <rect x="470" y="38" width="420" height="120" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/>
+    <rect x="486" y="54" width="110" height="34" rx="6" fill="var(--session-soft)"/>
+    <rect x="616" y="54" width="110" height="34" rx="6" fill="var(--annotate-soft)"/>
+    <rect x="746" y="54" width="128" height="34" rx="6" fill="var(--browser-soft)"/>
+    <rect x="486" y="108" width="150" height="34" rx="6" fill="var(--session-soft)" stroke="var(--keep)" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="496" y="130" class="svg-ink" font-size="13">7 · claude -p --resume</text>
+    <circle cx="626" cy="112" r="11" fill="var(--annotate)"/>
+    <text x="622" y="117" fill="#fff" font-size="12" font-weight="700">1</text>
+    <text x="470" y="182" class="svg-ink">ancre = le bloc pointé, dans le schéma</text>
+    <text x="470" y="202" class="svg-muted">prompt : « Pointed at: "7 · claude -p --resume" »</text>
+    <text x="470" y="220" class="svg-muted">en plus du contexte large, pas à sa place</text>
+  </g>
+</svg>
+<figcaption>Même défaut dans le texte : un Alt+clic au milieu d'un long paragraphe cite ses 120 premiers
+caractères, pas la phrase pointée. Le cas du tableau (note #2 de cet envoi) tombait juste : une cellule
+est assez petite.</figcaption>
+</figure>
+<div class="scroll">
+<table>
+<thead><tr><th>Où l'on clique</th><th>Ancre aujourd'hui</th><th>Proposé</th></tr></thead>
+<tbody>
+<tr><td>dans un schéma SVG</td><td>le <code>&lt;svg&gt;</code> le plus extérieur</td><td>le <code>&lt;text&gt;</code> ou le groupe sous le clic, sinon le texte le plus proche du point</td></tr>
+<tr><td>dans un long paragraphe</td><td>le paragraphe, cité depuis son début</td><td>la phrase sous le clic (<code>caretPositionFromPoint</code>), le mot pointé marqué</td></tr>
+<tr><td>sur une sélection, puis Alt+clic</td><td>la sélection, exactement</td><td>inchangé : c'est déjà le geste précis disponible aujourd'hui — prévu par le code, mais aucun test ne l'exerce</td></tr>
+</tbody>
+</table>
+</div>
+<div class="verdict"><strong>Proposé — non codé.</strong> Le prompt garderait la section et le contexte
+large, et y ajouterait une ligne « Pointed at » qui nomme ce qui était sous le pointeur : la session n'a plus
+à deviner. En attendant, sélectionner le passage avant l'Alt+clic devrait donner une citation exacte : le code le
+prévoit, aucun test ne l'a encore vérifié.</div>
 <details><summary>Le contrat HTTP, et pourquoi aucune page web ne peut déclencher un envoi</summary>
 <p><code>GET /docs/&lt;id&gt;</code> relit le fichier à chaque requête et injecte <code>annotate.js</code> ;
 <code>GET /docs/&lt;id&gt;/files/…</code> sert les images relatives et refuse tout chemin qui sort du dossier
@@ -280,6 +382,7 @@ réutiliserait alors <code>annotate.js</code> et l'API du démon telles quelles.
 <thead><tr><th></th><th>Affirmation</th><th>Mesure</th></tr></thead>
 <tbody>
 <tr><td class="ok">✓</td><td>Alt+clic → note enregistrée ; après rechargement l'épingle revient au point cliqué</td><td>Chromium 151 headless (Playwright) : écart ≤ 2 px exigé et tenu</td></tr>
+<tr><td class="no">⚠</td><td>…mais la note ne dit pas toujours ce qu'elle désigne : l'ancre peut être bien plus large que le point cliqué</td><td>constaté sur un envoi réel : une épingle posée sur le schéma du flux a été citée comme tout le schéma (voir <a href="#precision">b · ancre trop large</a>)</td></tr>
 <tr><td class="ok">✓</td><td>Une note dont l'ancre a disparu reste listée et survit aux sauvegardes suivantes</td><td>même test ; la mutation qui la retire du modèle le fait tomber</td></tr>
 <tr><td class="ok">✓</td><td>Images relatives chargées, lien <code>#section</code> reste sur la page, barre lisible à 390 px</td><td>même test, captures regardées</td></tr>
 <tr><td class="ok">✓</td><td>Envoi : seules les notes jamais envoyées partent ; repli sur session neuve si la session a disparu</td><td>faux <code>claude</code> exécutable, lancé par le vrai <code>Popen</code> ; six mutations dirigées, six tuées</td></tr>
@@ -290,7 +393,7 @@ réutiliserait alors <code>annotate.js</code> et l'API du démon telles quelles.
 <tr><td class="no">✗</td><td>Alt+clic dans le Chrome Windows réel</td><td>non mesuré : testé sous Linux headless. Sous Windows, Alt seul peut donner le focus au menu du navigateur.</td></tr>
 <tr><td class="no">✗</td><td>L'icône de la pastille, son menu, ses couleurs</td><td>non regardés : pas d'écran. Syntaxe et mode <code>-Once</code> vérifiés.</td></tr>
 <tr><td class="no">✗</td><td>Le hook dans une vraie session Claude Code</td><td>éprouvé avec un JSON fabriqué ; les hooks se chargent au démarrage d'une session.</td></tr>
-<tr><td class="no">✗</td><td>Reprendre une session encore ouverte dans un terminal</td><td>non mesuré : deux écrivains sur la même conversation.</td></tr>
+<tr><td class="no">✗</td><td>Reprendre une session encore ouverte dans un terminal</td><td>non mesuré : deux écrivains sur la même conversation. Il faudrait livrer à la session ouverte plutôt qu'à côté d'elle (voir <a href="#session-ouverte">b · session ouverte</a>).</td></tr>
 </tbody>
 </table>
 </div>
