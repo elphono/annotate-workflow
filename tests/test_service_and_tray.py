@@ -95,3 +95,11 @@ def test_the_tray_calls_the_ipv4_loopback():
     script = TRAY_PS1.read_text()
     assert '$BaseUrl = "http://127.0.0.1:$Port"' in script
     assert "http://localhost" not in script
+
+
+def test_no_function_returns_an_array_wrapped_in_a_comma():
+    """`return , $x` + a caller's `@( )` = ONE element holding the whole array:
+    the tray showed every session title on one line (measured 2026-10-05)."""
+    code = [line for line in TRAY_PS1.read_text().splitlines()
+            if re.match(r"\s*return\s*,", line)]   # comments may name the trap
+    assert not code, f"use `return $x`, callers wrap in @( ): {code}"

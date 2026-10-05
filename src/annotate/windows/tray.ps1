@@ -95,7 +95,10 @@ function Get-Groups {
     if ($groups.Count -eq 0 -and @($State.Docs).Count -gt 0) {
         $groups += , @{ Label = 'documents'; Docs = @($State.Docs) }
     }
-    return , $groups
+    # NOT `return , $groups`: the callers wrap the call in @( ), and the comma
+    # would make them see ONE group holding all the others (measured
+    # 2026-10-05: every title on one line, every document under it).
+    return $groups
 }
 
 function Get-Summary {
