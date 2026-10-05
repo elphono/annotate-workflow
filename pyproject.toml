@@ -1,0 +1,46 @@
+[project]
+name = "annotate-workflow"
+version = "0.1.0"
+description = "Annotate the HTML documents a Claude Code session produced, and send the notes back to that session"
+requires-python = ">=3.12"
+# No runtime dependency, on purpose: the daemon is `http.server`, the config is
+# `tomllib`, the registry is `json`. See CLAUDE.md, "Invariants".
+dependencies = []
+
+[project.scripts]
+annotate = "annotate.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/annotate"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[tool.mypy]
+files = ["src/annotate", "tools", "hooks"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "browser: drives a real headless Chromium through Playwright (run explicitly: -m browser)",
+]
+addopts = "-m 'not browser'"
+
+# Same rule set as remarkable-sync, for the same reason: the set the repository
+# keeps GREEN. E501 is left out (prompt templates and shell lines are long by
+# nature), I (import order) too.
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W"]
