@@ -8,8 +8,8 @@ forwards its own to the child: Python received two (10 times out of 15), and
 the duplicate ended in exit 143 or in a deadlock then SIGKILL.
 
 Every path comes from the environment at generation time: the interpreter
-running this command (hence the venv), `claude`, `cmd.exe` and `explorer.exe`
-on the PATH. Nothing is written in the code.
+running this command (hence the venv), `claude`, `cmd.exe`, `explorer.exe` and
+`wt.exe` on the PATH. Nothing is written in the code.
 """
 from __future__ import annotations
 
@@ -39,10 +39,12 @@ def unit_path() -> Path:
 
 
 def search_path() -> str:
-    """PATH of the unit: where `claude` and the Windows openers live, then
-    the system directories."""
+    """PATH of the unit: where `claude`, the Windows openers and Windows
+    Terminal live, then the system directories. `wt.exe` sits in
+    `WindowsApps`, which no other tool shares: without it the daemon falls
+    back to a plain console window (terminal.py)."""
     dirs: list[str] = []
-    for tool in ("claude", "wslview", "cmd.exe", "explorer.exe"):
+    for tool in ("claude", "wslview", "cmd.exe", "explorer.exe", "wt.exe"):
         found = shutil.which(tool)
         if found and str(Path(found).parent) not in dirs:
             dirs.append(str(Path(found).parent))

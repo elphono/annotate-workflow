@@ -8,16 +8,19 @@ working directory, so that the notes the user pins on it later come back to
 that very session.
 
 Reads the hook JSON on stdin (`session_id`, `cwd`, `tool_input.file_path`).
-Calls `annotate register <path> --session <id> --cwd <cwd>`, found on the
-PATH first, then in the virtualenv of this repository.
+Calls `annotate register <path> --session <id> --cwd <cwd> --hook`, found on
+the PATH first, then in the virtualenv of this repository, and forwards what
+it prints: an `additionalContext` that tells the session to start
+`annotate wait <id>` in the background, unless a session already listens for
+that document. That background command is what brings the user's notes back
+into the open conversation (see src/annotate/listeners.py).
 
 **It never fails the session's tool call**: every error is swallowed, the
-exit code is always 0, the registration is bounded to 10 s.
+exit code is always 0, the registration is bounded to 10 s, and anything
+that is not a JSON object is dropped rather than forwarded.
 
-**It ignores the sessions annotate itself starts** (`ANNOTATE_SESSION=1`,
-set by `annotate.claude.session_env`): a session answering notes edits the
-document, and re-registering it from there would reset its status while the
-daemon is settling it. Same loop as remarkable-sync's `RMSYNC_TOUR`.
+A session answering notes edits the document, and is registered again:
+that is how `delivered` becomes `answered` (registry.register).
 
 The workspace is `$ANNOTATE_WORKSPACE`, or `~/workspace`.
 """
@@ -29,9 +32,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-
-SESSION_MARKER = "ANNOTATE_SESSION"
-
 
 def workspace() -> Path:
     return Path(os.environ.get("ANNOTATE_WORKSPACE") or Path.home() / "workspace")
@@ -57,8 +57,6 @@ def wanted(path: Path, root: Path) -> bool:
 
 
 def main() -> int:
-    if os.environ.get(SESSION_MARKER):
-        return 0
     try:
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
@@ -84,10 +82,18 @@ def main() -> int:
         argv += ["--session", session]
     if cwd:
         argv += ["--cwd", cwd]
+    argv.append("--hook")
     try:
-        subprocess.run(argv, capture_output=True, timeout=10, check=False)
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=10,
+                              check=False)
     except (OSError, subprocess.SubprocessError):
-        pass
+        return 0
+    try:
+        answer = json.loads(done.stdout) if done.returncode == 0 else None
+    except ValueError:
+        answer = None
+    if isinstance(answer, dict) and answer:
+        print(json.dumps(answer))
     return 0
 
 

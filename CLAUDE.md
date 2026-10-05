@@ -2,24 +2,30 @@
 
 Successeur du pont papier de `../remarkable-sync`, sans tablette. **Le besoin** : quand une
 session Claude Code produit un document HTML, son lecteur l'annote dans son navigateur, et les
-annotations reviennent toutes seules à la session qui l'a produit (ou à une session neuve sur ce
-document). Rester simple : faciliter l'échange entre l'utilisateur et la session, via un document.
+annotations reviennent toutes seules **dans la conversation ouverte** qui l'a produit (ou, si
+aucune n'attend, dans un onglet de terminal qui la reprend). Rester simple : faciliter l'échange
+entre l'utilisateur et la session, via un document.
 
 ```
 session Claude Code ── Write/Edit docs/x.html
         │  hook PostToolUse  hooks/register-on-write.py
         ▼
-annotate register x.html --session <id> --cwd <dépôt>
+annotate register x.html --session <id> --cwd <dépôt> --hook
         │  ~/.local/share/annotate/registry.json
+        │  et, à la session : « lance `annotate wait <doc>` en arrière-plan »
         ▼
+session ── annotate wait <doc>  (commande d'arrière-plan : POST …/wait, tenu par le démon)
+        ┊
 démon `annotate serve` (127.0.0.1:8765, service systemd utilisateur)
         │  GET /docs/<id> : le HTML du disque + overlay (annotate.js)
         ▼
 navigateur Windows ── Alt+clic → épingle + note ── PUT /api/docs/<id>/annotations
         │  « Send to session » (barre, pastille ou `annotate send <id>`)
         ▼
-claude -p --resume <session> --permission-mode acceptEdits   (en arrière-plan)
-        └─► la session corrige x.html sur place ; un rechargement montre la nouvelle version
+une session attend ? ── oui ─► `annotate wait` rend les notes et sort : Claude Code réveille
+        │                     LA conversation ouverte, qui corrige x.html puis relance wait
+        └─ non ─► onglet Windows Terminal : `claude --resume <session>` interactif, avec les
+                  notes (session neuve si elle a disparu de cette machine)
 ```
 
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
@@ -37,6 +43,7 @@ uv run mypy                              # doit passer intégralement
 uv run python tools/mutate.py            # campagne de mutation dirigée, sur une COPIE
 
 uv run annotate register <chemin.html> [--session ID] [--cwd DIR]
+uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : rend les notes
 uv run annotate list | open <id> | send <id> | new-session <id> | forget <id> [--delete]
 uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
@@ -44,8 +51,8 @@ uv run annotate tray [--start|--once|--uninstall]   # pastille Windows + raccour
 uv run annotate status                   # le démon en une ligne
 ```
 
-Configuration : `~/.config/annotate/config.toml` (`port`, `send_timeout`, `claude_bin`),
-surchargeable par `ANNOTATE_PORT`, `ANNOTATE_SEND_TIMEOUT`, `ANNOTATE_CLAUDE` ; données sous
+Configuration : `~/.config/annotate/config.toml` (`port`, `claude_bin`), surchargeable par
+`ANNOTATE_PORT`, `ANNOTATE_CLAUDE` ; données sous
 `ANNOTATE_DATA_DIR` (défaut `~/.local/share/annotate`). Le hook lit `ANNOTATE_WORKSPACE`
 (défaut `~/workspace`).
 
@@ -68,15 +75,17 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 |---|---|
 | aucune dépendance d'exécution hors bibliothèque standard | `dependencies = []` dans `pyproject.toml` |
 | les annotations ne vont **jamais** à côté du document (il vit dans un dépôt) | `test_annotations_never_live_next_to_the_document` |
-| aucun test ne lance `claude`, `ssh`, `cmd.exe`, `powershell.exe`, `wsl.exe`, `systemctl`…, ni n'émet un vrai signal | fixtures autouse de `tests/conftest.py`, armement vérifié par `tests/test_suite_guards.py` |
-| le démon ne bloque jamais sur une session | `Sender.dispatch` rend la main avant la fin ; `test_dispatch_returns_before_the_session_ends…` |
-| `send` n'envoie que les annotations jamais envoyées ; le serveur fait autorité sur `sent_at` | `test_send_resumes_the_session_with_only_the_unsent_notes`, `test_a_stale_browser_copy_cannot_unsend_a_note` |
+| aucun test ne lance `claude`, `ssh`, `cmd.exe`, `powershell.exe`, `wsl.exe`, `wt.exe`, `systemctl`…, ni n'émet un vrai signal, ni ne lit les transcripts de `~/.claude` | fixtures autouse de `tests/conftest.py`, armement vérifié par `tests/test_suite_guards.py` |
+| une session qui attend reçoit les notes, et aucun onglet ne s'ouvre alors | `test_an_open_session_receives_only_the_unsent_notes`, `test_the_notes_reach_the_open_session_that_waits` |
+| jamais de notes livrées à une attente dont le client est parti (session fermée) | `test_a_dead_client_is_never_handed_the_notes`, `test_a_wait_whose_client_left_stops_listening` |
+| un double clic ne livre les notes qu'une fois | `test_a_double_click_hands_the_notes_over_once` |
+| le prompt arrive à `claude` en UN argument, quoi qu'il contienne ; aucun `;` sur la ligne de `wt.exe` | `test_the_prompt_reaches_claude_as_one_argument_in_the_right_folder`, `test_the_tab_command_never_carries_a_semicolon` |
+| `send` n'envoie que les annotations jamais envoyées ; le serveur fait autorité sur `sent_at` | `test_an_open_session_receives_only_the_unsent_notes`, `test_a_stale_browser_copy_cannot_unsend_a_note` |
 | une annotation dont l'ancre ne résout plus n'est jamais perdue (barre « orphelines », prompt « Anchor: lost ») | `test_a_lost_anchor_is_still_sent_with_its_quote`, `test_browser.py` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
-| `kill_group` ne signale jamais le pid 0 ou 1 (copié de remarkable-sync, voir sa docstring) | `test_kill_group_refuses_pids_zero_and_one` |
 
-Les six propriétés centrales sont éprouvées par `tools/mutate.py`, qui casse chacune sur une
+Les propriétés centrales sont éprouvées par `tools/mutate.py`, qui casse chacune sur une
 copie du dépôt et exige que la suite tombe.
 
 ## Ce qui n'est pas évident, et qui a coûté
@@ -96,18 +105,32 @@ copie du dépôt et exige que la suite tombe.
 - **Les épingles sont mises à jour en place, jamais recréées** : les recréer à chaque
   redimensionnement faisait disparaître l'élément survolé (surlignage collé) et rendait le test
   navigateur rouge deux fois sur huit.
-- **Un envoi qui échoue est défait, pas rejoué** : le lot (identifié par son `sent_at`) redevient
-  envoyable, et c'est l'utilisateur qui reclique. Un démon qui redémarre pendant une session
-  défait de même le lot resté `sent` (`sender.recover_stale`).
+- **Plus aucune session en arrière-plan, et c'est une mesure.** Le premier envoi réel
+  (2026-10-05) reprenait la session par `claude -p`, sans écran : 2 min 45 s, 1,71 $, l'étude
+  corrigée et commitée, et rien de visible pour l'utilisateur qui attendait devant la session
+  ouverte. L'envoi va désormais à la session qui attend (`annotate wait`), sinon dans un
+  **onglet** Windows Terminal qui la reprend. Un onglet et non une fenêtre : `launchMode:
+  fullscreen` ne vaut que pour les fenêtres neuves (remarkable-sync, 2026-09-17).
+- **`wt.exe` coupe sa ligne de commande au `;`** (mesuré le 2026-10-05 : un `bash -c 'a; b'`
+  n'a exécuté que la première moitié). L'onglet lance donc un script écrit sous le dossier de
+  données, et le prompt passe par un fichier, jamais par la ligne de commande.
+- **Le démon tourne sous systemd sans `WSL_DISTRO_NAME` ni le dossier de `wt.exe`** :
+  la distribution est lue sur `wslpath -w /`, et `annotate service` met `WindowsApps` dans
+  le `PATH` de l'unité (la regénérer après mise à jour).
+- **`annotate` n'est pas sur le PATH des sessions** : la consigne donnée par le hook et le
+  prompt portent le chemin absolu de l'entrée du virtualenv (`config.annotate_command`).
+- **Un envoi qui échoue est défait, pas rejoué** : les notes ne sont marquées envoyées
+  qu'une fois une session en main ; un onglet qui ne s'ouvre pas les laisse envoyables, avec
+  la raison dans `last_error`. C'est l'utilisateur qui reclique.
 - **Un témoin de garde doit rester inoffensif quand la garde est désarmée** : c'est exactement
   ce que fait la mutation. Le premier `test_suite_guards.py` appelait le vrai `explorer.exe` ;
   la campagne du 2026-10-05 l'a lancé pour de bon. Les témoins sont désormais des exécutables
   inertes qui portent le nom interdit.
-- **Une session lancée par un envoi suit les règles globales de l'utilisateur** : mesurée le
-  2026-10-05, elle a corrigé le fichier puis l'a commité d'elle-même (`acceptEdits` n'empêche
-  pas `git` quand les permissions l'autorisent). Avec un remote, elle poussera aussi.
-- Les sessions lancées par annotate portent `ANNOTATE_SESSION=1` ; le hook les ignore, sans quoi
-  la session qui répond ré-enregistrerait le document qu'elle corrige.
+- **La session qui répond suit les règles globales de l'utilisateur** : elle commite, et
+  pousse s'il y a un remote — y compris dans un dépôt d'équipe.
+- **Une correction après livraison vaut réponse** : le hook ré-enregistre le document à chaque
+  écriture, et `registry.register` fait alors passer `delivered` à `answered`. La barre du
+  navigateur compare de son côté la date du fichier et propose « Reload ».
 
 ## Phase 2 — étudiée, pas codée
 

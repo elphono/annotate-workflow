@@ -79,6 +79,8 @@ button.danger { color: var(--danger); }
 .toggle { padding: 0 6px; border: none; background: transparent; }
 .status { color: var(--muted); margin-top: 2px; }
 .status.busy { color: var(--accent); font-weight: 600; }
+.listening { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.listening.on { color: var(--accent); }
 .orphans { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line);
   max-height: 160px; overflow: auto; }
 .orphans-title { font-size: 12px; font-weight: 700; color: var(--danger); }

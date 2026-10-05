@@ -74,14 +74,15 @@ function Get-Docs {
 }
 
 function Get-Summary {
-    <# One state for the icon: down, running, pending, idle. #>
+    <# One state for the icon: down, running (notes handed to a session that
+       has not rewritten the document yet), pending, idle. #>
     param($State)
     if (-not $State.Ok) { return @{ Kind = 'down'; Text = 'annotate: daemon unreachable' } }
-    $running = @($State.Docs | Where-Object { $_.running -or $_.status -eq 'sent' }).Count
+    $running = @($State.Docs | Where-Object { $_.status -eq 'delivered' }).Count
     $pending = 0
     foreach ($d in $State.Docs) { $pending += [int]$d.pending }
     $count = @($State.Docs).Count
-    if ($running -gt 0) { return @{ Kind = 'running'; Text = "annotate: $running session(s) running" } }
+    if ($running -gt 0) { return @{ Kind = 'running'; Text = "annotate: $running document(s) with a session on them" } }
     if ($pending -gt 0) { return @{ Kind = 'pending'; Text = "annotate: $pending note(s) to send" } }
     return @{ Kind = 'idle'; Text = "annotate: $count document(s)" }
 }
@@ -92,7 +93,7 @@ function Format-DocLine {
     if (-not $title) { $title = [string]$Doc.path }
     if ($title.Length -gt 48) { $title = $title.Substring(0, 45) + '...' }
     $state = [string]$Doc.status
-    if ($Doc.running) { $state = 'running' }
+    if ($Doc.listening) { $state = "$state, session listening" }
     return "$title  [$state, $($Doc.pending)/$($Doc.annotations) to send]"
 }
 
@@ -201,7 +202,10 @@ function Invoke-DocAction {
     }
     if ($r.Ok) {
         if ($Action -eq 'send' -or $Action -eq 'new-session') {
-            Show-Done "$($r.Data.count) note(s) sent: the session runs in the background."
+            if ([string]$r.Data.target -eq 'session') {
+                Show-Done "$($r.Data.count) note(s) delivered to the open session."
+            }
+            else { Show-Done "$($r.Data.count) note(s) opened in a terminal tab." }
         }
         else { Show-Done 'Done.' }
     }

@@ -3,15 +3,16 @@
 Three autouse fixtures, each closing a failure that cost something real in
 remarkable-sync, from which they are adapted:
 
-- `_isolated_data`: no test reads or writes the user's registry, annotations
-  or config. A test writing `~/.local/share/annotate/registry.json` would make
+- `_isolated_data`: no test reads or writes the user's registry, annotations,
+  config or Claude Code transcripts. A test writing `~/.local/share/annotate/registry.json` would make
   the tray icon and the browser show a fake document.
 - `_no_outside_process`: no test launches `claude` (billed, can edit files,
   an interactive one blocks the suite: measured 9 s of billed session the day
   the guard was introduced over there), nor anything that reaches the
   Windows desktop or systemd (`cmd.exe`, `explorer.exe`, `wslview`,
-  `powershell.exe`, `wsl.exe`, `reg.exe`, `systemctl`), nor `ssh`/`scp`.
-  The end-to-end test uses a fake executable that is NOT named `claude`.
+  `powershell.exe`, `wsl.exe`, `wt.exe` (it opens real terminal tabs),
+  `reg.exe`, `systemctl`), nor `ssh`/`scp`. The end-to-end tests use fakes
+  that are NOT named `claude` or `wt.exe`.
 - `_no_real_signal`: no test sends a signal to a process it did not start.
   `os.killpg` is refused outright; `os.kill` only reaches pids of processes
   the test itself spawned. In remarkable-sync, a double carrying `pid = 1`
@@ -30,9 +31,11 @@ from pathlib import Path
 
 import pytest
 
+from annotate import claude
+
 FORBIDDEN_PROGRAMS = frozenset({
     "claude", "ssh", "scp", "cmd.exe", "explorer.exe", "wslview",
-    "powershell.exe", "wsl.exe", "reg.exe", "systemctl",
+    "powershell.exe", "wsl.exe", "wt.exe", "reg.exe", "systemctl",
 })
 
 
@@ -40,9 +43,14 @@ FORBIDDEN_PROGRAMS = frozenset({
 def _isolated_data(tmp_path, monkeypatch):
     monkeypatch.setenv("ANNOTATE_DATA_DIR", str(tmp_path / "annotate-data"))
     monkeypatch.setenv("ANNOTATE_CONFIG", str(tmp_path / "annotate-config.toml"))
-    for name in ("ANNOTATE_PORT", "ANNOTATE_CLAUDE", "ANNOTATE_SEND_TIMEOUT",
-                 "ANNOTATE_SESSION"):
+    for name in ("ANNOTATE_PORT", "ANNOTATE_CLAUDE", "WSL_DISTRO_NAME",
+                 # set when the suite runs inside a Claude Code session:
+                 # `annotate wait` would report that session's id
+                 "CLAUDE_CODE_SESSION_ID"):
         monkeypatch.delenv(name, raising=False)
+    # `claude.resumable` reads ~/.claude/projects: never the user's own.
+    projects = tmp_path / "claude-projects"
+    monkeypatch.setattr(claude, "projects_dir", lambda: projects)
 
 
 def _program(argv: object) -> str:

@@ -26,15 +26,27 @@ def test_register_is_idempotent_on_the_path(make_doc):
     assert a["status"] == "new"
 
 
-def test_reregistering_resets_to_new_unless_notes_are_waiting(make_doc):
+def test_a_write_after_a_delivery_is_the_answer(make_doc):
+    """The hook re-registers on every write: that is how `answered` happens."""
     path = make_doc("<p>First</p>")
     doc_id = registry.register(path)["id"]
+    assert registry.register(path)["status"] == "new"
     registry.replace_annotations(doc_id, [note("n1")])
     assert registry.get(doc_id)["status"] == "annotated"
-    assert registry.register(path)["status"] == "annotated"
+    assert registry.register(path)["status"] == "annotated"       # notes still wait
     registry.mark_sent(doc_id, ["n1"], "T1")
-    registry.update(doc_id, status="answered")
-    assert registry.register(path, session="s2")["status"] == "new"
+    registry.update(doc_id, status="delivered")
+    assert registry.register(path, session="s2")["status"] == "answered"
+    assert registry.register(path)["status"] == "answered"        # later writes too
+    registry.replace_annotations(doc_id, [note("n1"), note("n2")])
+    assert registry.register(path)["status"] == "annotated"       # new notes win
+
+
+def test_the_words_under_the_cursor_are_kept(make_doc):
+    doc_id = registry.register(make_doc("<p>First</p>"))["id"]
+    [item] = registry.replace_annotations(doc_id, [note("n1", at="[[First]]")])
+    assert item["at"] == "[[First]]"
+    assert registry.replace_annotations(doc_id, [note("n1")])[0]["at"] == ""
 
 
 def test_annotations_never_live_next_to_the_document(make_doc):

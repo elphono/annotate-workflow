@@ -1,6 +1,7 @@
 """`annotate`: register documents, run the daemon, talk to it.
 
-    annotate register <path> [--session ID] [--cwd DIR]
+    annotate register <path> [--session ID] [--cwd DIR] [--hook]
+    annotate wait <id>
     annotate list
     annotate open <id>
     annotate send <id>
@@ -14,13 +15,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
-from . import browser, client, config, registry, server, service, tray
+from . import browser, client, config, prompt, registry, server, service, tray
 
 log = logging.getLogger("annotate")
 
@@ -33,9 +37,65 @@ def _url(cfg: config.Config, doc_id: str) -> str:
 def cmd_register(args: argparse.Namespace, cfg: config.Config) -> int:
     entry = registry.register(Path(args.path), session=args.session,
                               cwd=Path(args.cwd) if args.cwd else None)
+    if args.hook:
+        print(json.dumps(hook_output(cfg, entry)))
+        return 0
     print(f"{entry['id']}  {entry['status']}  {entry['title']}")
     print(_url(cfg, entry["id"]))
     return 0
+
+
+def _listening(cfg: config.Config, doc_id: str) -> bool:
+    try:
+        data = client.call(cfg.port, "GET", f"/api/docs/{doc_id}", timeout=3)
+    except client.ClientError:
+        return False
+    return bool(data.get("listening"))
+
+
+def hook_output(cfg: config.Config, entry: dict[str, object]) -> dict[str, object]:
+    """What the PostToolUse hook prints: tell the writing session how to get
+    the user's notes back, unless a session already listens for them.
+
+    Telling it on every write would repeat the same paragraph each time the
+    session edits its document, answering notes included."""
+    doc_id = str(entry["id"])
+    if _listening(cfg, doc_id):
+        return {}
+    context = (
+        f"annotate: {entry['path']} is registered as document {doc_id}; the user "
+        f"reads and annotates it at {_url(cfg, doc_id)} . So that the user's notes "
+        f"come back to THIS conversation, start this command once, as a background "
+        f"command (run_in_background), and do not wait for it: "
+        f"`{prompt.wait_command(doc_id)}`. It ends when the user sends notes, and "
+        f"its output is the notes. Skip it if it is already running for {doc_id}.")
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                   "additionalContext": context}}
+
+
+def cmd_wait(args: argparse.Namespace, cfg: config.Config) -> int:
+    """Wait for the user's notes on a document; print them and exit.
+
+    Meant to run as a BACKGROUND command of a Claude Code session: when it
+    exits, Claude Code hands its output to that session. It never exits on
+    its own otherwise: a daemon restart or an unreachable daemon only makes
+    it ask again a few seconds later, since waking the session up to say
+    "nothing happened" would be noise in the conversation.
+    """
+    registry.get(args.id)  # an unknown id is an error now, not a silent wait
+    body = {"session": os.environ.get("CLAUDE_CODE_SESSION_ID", ""),
+            "cwd": os.getcwd()}
+    while True:
+        try:
+            result = client.call(cfg.port, "POST", f"/api/docs/{args.id}/wait", body,
+                                 timeout=server.WAIT_HOLD + 20)
+        except client.DaemonUnreachable:
+            time.sleep(args.retry)
+            continue
+        text = result.get("prompt")
+        if isinstance(text, str) and text:
+            print(text)
+            return 0
 
 
 def cmd_list(args: argparse.Namespace, cfg: config.Config) -> int:
@@ -59,11 +119,20 @@ def cmd_open(args: argparse.Namespace, cfg: config.Config) -> int:
 
 
 def _post(cfg: config.Config, doc_id: str, action: str) -> int:
-    result = client.call(cfg.port, "POST", f"/api/docs/{doc_id}/{action}")
-    target = "a new session" if result.get("fresh") else "the producing session"
-    print(f"{result.get('count')} note(s) of {doc_id} sent to {target}; the "
-          f"daemon runs it in the background (annotate list shows the status)")
+    result = client.call(cfg.port, "POST", f"/api/docs/{doc_id}/{action}", timeout=60)
+    print(describe(result))
     return 0
+
+
+def describe(result: dict[str, object]) -> str:
+    """Where the notes went, in one line (also what the browser says)."""
+    count = result.get("count")
+    if result.get("target") == "session":
+        return f"{count} note(s) delivered to the open session {result.get('session') or ''}".rstrip()
+    if result.get("fresh"):
+        return f"{count} note(s) opened in a terminal tab, in a NEW session"
+    return (f"{count} note(s) opened in a terminal tab: no open session listened, "
+            f"session {result.get('session')} resumed there")
 
 
 def cmd_send(args: argparse.Namespace, cfg: config.Config) -> int:
@@ -128,11 +197,11 @@ def cmd_status(args: argparse.Namespace, cfg: config.Config) -> int:
         return 1
     docs = data.get("docs", [])
     counts = Counter(d.get("status") for d in docs)
-    running = sum(1 for d in docs if d.get("running"))
+    listening = sum(1 for d in docs if d.get("listening"))
     parts = [f"{counts[s]} {s}" for s in registry.STATUSES if counts[s]]
     print(f"daemon up on :{cfg.port}, {len(docs)} document(s)"
           + (": " + ", ".join(parts) if parts else "")
-          + (f"; {running} session(s) running" if running else ""))
+          + (f"; {listening} with a session listening" if listening else ""))
     return 0
 
 
@@ -146,14 +215,22 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--session", default=None,
                    help="id of the producing Claude Code session ('' clears it)")
     p.add_argument("--cwd", default=None, help="working directory of that session")
+    p.add_argument("--hook", action="store_true",
+                   help="print the JSON the Claude Code hook forwards (internal)")
     p.set_defaults(run=cmd_register)
+
+    p = sub.add_parser("wait", help="wait for the user's notes on a document, print "
+                                    "them (run it in the background of a session)")
+    p.add_argument("id")
+    p.add_argument("--retry", type=float, default=5.0, help=argparse.SUPPRESS)
+    p.set_defaults(run=cmd_wait)
 
     sub.add_parser("list", help="one line per document").set_defaults(run=cmd_list)
 
     for name, run, text in (("open", cmd_open, "open the document in the browser"),
-                            ("send", cmd_send, "send the unsent notes to the session"),
+                            ("send", cmd_send, "hand the unsent notes to a session"),
                             ("new-session", cmd_new_session,
-                             "send the unsent notes to a NEW session")):
+                             "open the unsent notes in a NEW session (terminal tab)")):
         p = sub.add_parser(name, help=text)
         p.add_argument("id")
         p.set_defaults(run=run)

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from annotate import browser, registry, sender, server
+from annotate import browser, listeners, registry, sender, server
 from annotate.config import Config
-from fakes import FakePopen, ok
+from fakes import RecordingOpener
 
 
 class Daemon:
@@ -38,13 +38,13 @@ class Daemon:
 
 @pytest.fixture
 def daemon():
-    fake = FakePopen(*[ok("sess-srv")] * 5)
+    opener = RecordingOpener()
     cfg = Config()
-    srv = server.make_server(cfg, port=0, send=sender.Sender(cfg, popen=fake))
+    srv = server.make_server(cfg, port=0, send=sender.Sender(cfg, opener=opener))
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     d = Daemon(srv)
-    d.fake = fake  # type: ignore[attr-defined]
+    d.opener = opener  # type: ignore[attr-defined]
     yield d
     srv.shutdown()
     srv.server_close()
@@ -107,19 +107,89 @@ def test_annotations_round_trip_and_status(daemon, make_doc):
     assert daemon.request("PUT", f"/api/docs/{doc_id}/annotations", {"x": 1})[0] == 400
 
 
-def test_send_goes_through_the_sender_and_answers_at_once(daemon, make_doc):
+def test_send_without_a_listener_opens_a_tab(daemon, make_doc):
     doc_id = registry.register(make_doc("<p>Hello</p>"), session="s0")["id"]
     assert daemon.request("POST", f"/api/docs/{doc_id}/send")[0] == 409   # nothing yet
     daemon.request("PUT", f"/api/docs/{doc_id}/annotations",
                    [{"id": "n1", "selector": "body", "quote": "", "note": "x"}])
     status, body = daemon.request("POST", f"/api/docs/{doc_id}/send")
-    assert status == 202 and body["count"] == 1
-    for _ in range(100):
-        if registry.get(doc_id)["status"] == "answered":
+    assert status == 200 and body["count"] == 1 and body["target"] == "terminal"
+    assert registry.get(doc_id)["status"] == "delivered"
+    assert len(daemon.opener.calls) == 1
+
+
+def _hold(daemon, doc_id, body=None):
+    """A real `wait` request on its own connection: (thread, box)."""
+    box: dict[str, object] = {}
+
+    def run():
+        box["answer"] = daemon.request("POST", f"/api/docs/{doc_id}/wait",
+                                       body or {"session": "abc-123", "cwd": "/tmp"})
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if daemon.request("GET", f"/api/docs/{doc_id}")[1].get("listening"):
             break
-        threading.Event().wait(0.05)
-    assert registry.get(doc_id)["status"] == "answered"
-    assert daemon.fake.procs[0].argv[-1] == "s0"
+        threading.Event().wait(0.01)
+    return thread, box
+
+
+def test_a_held_wait_receives_the_notes_and_no_tab_opens(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>Hello</p>"), session="s0")["id"]
+    assert daemon.request("GET", f"/api/docs/{doc_id}")[1]["listening"] is False
+    thread, box = _hold(daemon, doc_id)
+    assert daemon.request("GET", "/api/docs")[1]["docs"][0]["listening"] is True
+    daemon.request("PUT", f"/api/docs/{doc_id}/annotations",
+                   [{"id": "n1", "selector": "body", "quote": "", "note": "make it red"}])
+    status, body = daemon.request("POST", f"/api/docs/{doc_id}/send")
+    thread.join(10)
+    assert (status, body["target"], body["session"]) == (200, "session", "abc-123")
+    answer_status, answer = box["answer"]  # type: ignore[misc]
+    assert answer_status == 200 and "make it red" in answer["prompt"]
+    assert daemon.opener.calls == []
+    assert registry.get(doc_id)["cwd"] == "/tmp"
+
+
+def test_a_wait_answers_nothing_when_its_hold_expires(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>Hello</p>"))["id"]
+    daemon.srv.wait_hold = 0.3
+    assert daemon.request("POST", f"/api/docs/{doc_id}/wait", {}) == (200, {"prompt": None})
+
+
+def test_a_wait_whose_client_left_stops_listening(daemon, make_doc, monkeypatch):
+    monkeypatch.setattr(listeners, "STEP", 0.05)
+    doc_id = registry.register(make_doc("<p>Hello</p>"))["id"]
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("POST", f"/api/docs/{doc_id}/wait", body=b"{}",
+                 headers={"Host": f"localhost:{daemon.port}", "X-Annotate": "t"})
+    for _ in range(200):
+        if daemon.request("GET", f"/api/docs/{doc_id}")[1]["listening"]:
+            break
+        threading.Event().wait(0.01)
+    assert daemon.request("GET", f"/api/docs/{doc_id}")[1]["listening"] is True
+    conn.close()                      # the session ended: its background command died
+    for _ in range(200):
+        if not daemon.request("GET", f"/api/docs/{doc_id}")[1]["listening"]:
+            break
+        threading.Event().wait(0.01)
+    assert daemon.request("GET", f"/api/docs/{doc_id}")[1]["listening"] is False
+
+
+def test_a_wait_on_an_unknown_document_is_a_404(daemon):
+    assert daemon.request("POST", "/api/docs/nope1234/wait", {})[0] == 404
+
+
+def test_a_bogus_session_or_folder_in_a_wait_is_ignored(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>Hello</p>"), session="s0")["id"]
+    before = registry.get(doc_id)["cwd"]
+    thread, _ = _hold(daemon, doc_id, {"session": "x; rm -rf /", "cwd": "relative/dir"})
+    daemon.request("PUT", f"/api/docs/{doc_id}/annotations",
+                   [{"id": "n1", "selector": "body", "quote": "", "note": "x"}])
+    status, body = daemon.request("POST", f"/api/docs/{doc_id}/send")
+    thread.join(10)
+    assert body["target"] == "session" and body["session"] == ""
+    assert registry.get(doc_id)["cwd"] == before and registry.get(doc_id)["session_id"] == "s0"
 
 
 def test_mutations_need_the_client_header_and_a_local_origin(daemon, make_doc):

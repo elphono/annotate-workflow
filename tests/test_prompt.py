@@ -26,6 +26,15 @@ def test_each_note_carries_section_quote_and_text(make_doc):
     assert entry["path"] in text and '"Test doc"' in text
     assert "edit the file in place" in text and "self-contained HTML" in text
     assert "read it first" not in text
+    assert "Clicked on" not in text                 # nothing captured, nothing said
+    assert text.rstrip().endswith(f"annotate wait {entry['id']}`")
+
+def test_the_words_under_the_cursor_go_with_the_note(make_doc):
+    entry = registry.register(make_doc(BODY))
+    pinned = {**item("a", "body > p:nth-of-type(1)", "Alpha text.", "this word"),
+              "at": "[[Alpha]] text."}
+    text = prompt.build(entry, [pinned])
+    assert 'Clicked on (the word between [[ ]]): "[[Alpha]] text."' in text
 
 
 def test_a_lost_anchor_is_still_sent_with_its_quote(make_doc):

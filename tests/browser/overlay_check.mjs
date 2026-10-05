@@ -1,15 +1,16 @@
 // Drives the overlay in a real headless Chromium, through Playwright.
 //
-//   node overlay_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir>
+//   node overlay_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir> <doc-path>
 //
 // <playwright-dir> is any directory whose node_modules holds `playwright`
 // (the repository does not depend on Node: see CLAUDE.md). Each step prints
 // one line; any failure exits non-zero with the reason. The Python side
 // (tests/test_browser.py) checks what reached the server.
 import { createRequire } from 'node:module';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const [pwDir, base, docId, outDir] = process.argv.slice(2);
+const [pwDir, base, docId, outDir, docPath] = process.argv.slice(2);
 const require = createRequire(join(pwDir, 'package.json'));
 const { chromium } = require('playwright');
 
@@ -56,6 +57,22 @@ try {
   }, `/api/docs/${docId}/annotations`);
   step('alt+click note saved by PUT');
 
+  // 3b. Alt+click in the figure, next to the "Browser" label (not on it).
+  const fig = await page.locator('#fig').boundingBox();
+  await page.keyboard.down('Alt');
+  await page.mouse.click(fig.x + 360, fig.y + 20);
+  await page.keyboard.up('Alt');
+  await page.waitForSelector('.bubble textarea');
+  const shown = await page.locator('.bubble-quote').textContent();
+  if (!shown.includes('label "Browser"')) fail('figure bubble shows: ' + shown);
+  await page.locator('.bubble textarea').fill('Rename this box.');
+  await page.locator('.bubble textarea').press('Enter');
+  await page.waitForFunction(async (api) => {
+    const r = await fetch(api); const d = await r.json();
+    return d.annotations.length === 3;
+  }, `/api/docs/${docId}/annotations`);
+  step('figure note saved, nearest label: ' + shown.trim());
+
   // 4. A plain click on a link still navigates: Alt+click must not break it.
   //    And a fragment link stays on the document despite the <base>.
   await page.locator('a[href="#second"]').click();
@@ -67,8 +84,8 @@ try {
   await page.reload();
   await page.waitForSelector('.pin');
   const pins = await page.locator('.pin').count();
-  if (pins !== 1) fail(`expected 1 pin (the orphan has none), got ${pins}`);
-  const pinBox = await page.locator('.pin').boundingBox();
+  if (pins !== 2) fail(`expected 2 pins (the orphan has none), got ${pins}`);
+  const pinBox = await page.locator('.pin').first().boundingBox();
   const cx = pinBox.x + pinBox.width / 2, cy = pinBox.y + pinBox.height / 2;
   const box2 = await target.boundingBox();
   const ex = box2.x + 40, ey = box2.y + box.height / 2;
@@ -79,21 +96,32 @@ try {
   if (!(await page.locator('.orphan').count())) fail('orphan lost after reload');
   step('orphan still listed after reload');
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.locator('.pin').hover();
+  await page.locator('.pin').first().hover();
+  const listening = await page.locator('.listening').textContent();
+  if (!listening.startsWith('An open session listens')) fail('listening line: ' + listening);
+  step('bar says: ' + listening);
   await page.screenshot({ path: join(outDir, 'overlay-before-send.png'), fullPage: false });
 
-  // 6. Send to session: the fake session answers, the bar says so.
-  await page.locator('.bar button.primary').click();
+  // 6. Send to session: the open session receives the notes, the bar says so.
+  await page.locator('.bar .bar-actions button.primary').first().click();
   await page.waitForFunction(() => {
     const bar = document.querySelector('annotate-root').shadowRoot.querySelector('.bar');
-    return bar.textContent.includes('The session answered');
+    return bar.textContent.includes('delivered to the open session');
   }, null, { timeout: 30000 });
   const counts = await page.locator('.counts').textContent();
   if (!counts.startsWith('0 to send')) fail('counts after send: ' + counts);
-  step('send answered, bar: ' + counts);
+  step('send delivered, bar: ' + counts);
   const sentPin = await page.locator('.pin.sent').count();
-  if (sentPin !== 1) fail('the sent pin is not greyed');
-  step('sent pin greyed');
+  if (sentPin !== 2) fail('the sent pins are not greyed');
+  step('sent pins greyed');
+
+  // 6b. The session edits the document: the bar offers to reload.
+  appendFileSync(docPath, '\n<!-- edited by the session -->\n');
+  await page.waitForFunction(() => {
+    const bar = document.querySelector('annotate-root').shadowRoot.querySelector('.bar');
+    return bar.textContent.includes('changed on disk');
+  }, null, { timeout: 15000 });
+  step('the edit on disk is noticed, Reload offered');
   await page.screenshot({ path: join(outDir, 'overlay-after-send.png'), fullPage: false });
 
   // 7. Phone width: the bar fits, no horizontal scroll introduced by it.

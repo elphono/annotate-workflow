@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import htmldoc
+from . import config, htmldoc
 
 
 class PromptError(Exception):
@@ -21,9 +21,14 @@ class PromptError(Exception):
 
 
 INSTRUCTION = (
-    "The user annotated the document you produced; address each note, edit "
+    "The user annotated this document in the browser; address each note, edit "
     "the file in place at `{path}`, keep it a self-contained HTML, and reply "
-    "briefly.")
+    "briefly in this conversation.")
+
+REARM = (
+    "Then, so that the next notes on this document come back to THIS "
+    "conversation, run again, as a background command (run_in_background), "
+    "and do not wait for it: `{wait}`")
 
 FRESH_CONTEXT = (
     "You did not produce this document in this conversation; read it first "
@@ -61,8 +66,20 @@ def build(entry: dict[str, Any], items: list[dict[str, Any]], *,
         quote = " ".join(str(item.get("quote", "")).split())
         lines.append(f"Quoted passage: \"{quote}\"" if quote
                      else "Quoted passage: (none captured)")
+        at = " ".join(str(item.get("at", "")).split())
+        if at:
+            lines.append(f"Clicked on (the word between [[ ]]): \"{at}\"")
         lines.append("Note:")
         lines.append(str(item.get("note", "")).strip())
     lines.append("")
     lines.append(INSTRUCTION.format(path=path))
+    lines.append(REARM.format(wait=wait_command(entry["id"])))
     return "\n".join(lines)
+
+
+def wait_command(doc_id: str) -> str:
+    """The command a session runs to receive the next notes on `doc_id`.
+
+    Absolute: `annotate` lives in this project's virtualenv, which is not on
+    the PATH of the sessions (measured 2026-10-05, `which annotate` empty)."""
+    return f"{config.annotate_command()} wait {doc_id}"

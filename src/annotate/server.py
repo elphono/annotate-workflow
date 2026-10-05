@@ -8,8 +8,9 @@
     GET    /api/docs/<id>                    one entry
     GET    /api/docs/<id>/annotations        the annotations
     PUT    /api/docs/<id>/annotations        replace them (status -> annotated)
-    POST   /api/docs/<id>/send               send unsent notes to the session
-    POST   /api/docs/<id>/new-session        same, in a NEW session
+    POST   /api/docs/<id>/send               hand unsent notes to a session
+    POST   /api/docs/<id>/new-session        same, in a NEW session (terminal tab)
+    POST   /api/docs/<id>/wait               held until notes come (`annotate wait`)
     POST   /api/docs/<id>/open               open the document in the browser
     DELETE /api/docs/<id>[?delete=1]         forget it (and delete the file)
 
@@ -30,7 +31,9 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import select
 import signal
+import socket
 import threading
 import time
 from http import HTTPStatus
@@ -40,7 +43,7 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import browser, htmldoc, registry, sender
+from . import browser, htmldoc, listeners, registry, sender
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -48,6 +51,10 @@ log = logging.getLogger("annotate")
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 2 * 1024 * 1024
 CLIENT_HEADER = "X-Annotate"
+# How long a `wait` request is held before answering "nothing yet"; the client
+# asks again at once. Short enough for a proxy-free loopback, long enough to
+# keep the polling cost negligible.
+WAIT_HOLD = 25.0
 
 
 class ServerError(Exception):
@@ -81,6 +88,7 @@ class AnnotateServer(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.cfg = cfg
         self.sender = send
+        self.wait_hold = WAIT_HOLD
 
     @property
     def port(self) -> int:
@@ -164,10 +172,10 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.NOT_FOUND, str(exc))
         except registry.InvalidAnnotations as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
-        except (sender.Busy, sender.NothingToSend) as exc:
+        except sender.NothingToSend as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (registry.RegistryError, sender.SendError, browser.OpenError,
-                htmldoc.HtmlDocError) as exc:
+                htmldoc.HtmlDocError, listeners.ListenerError) as exc:
             log.error("%s %s: %s", method, self.path, exc)
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
@@ -225,14 +233,40 @@ class Handler(BaseHTTPRequestHandler):
         page = htmldoc.inject_overlay(text, entry["id"])
         self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
 
-    def _with_running(self, item: dict[str, Any]) -> dict[str, Any]:
-        return {**item, "running": item["id"] in self.server.sender.running()}
+    def _with_live(self, item: dict[str, Any]) -> dict[str, Any]:
+        return {**item, "listening": self.server.sender.board.listening(item["id"])}
+
+    def _client_alive(self) -> bool:
+        """False once the client of this held request has gone away.
+
+        The request body has been read and the client sends nothing else
+        while it waits: the socket becoming readable means EOF (or a reset).
+        """
+        try:
+            readable, _, _ = select.select([self.connection], [], [], 0)
+            if not readable:
+                return True
+            return self.connection.recv(1, socket.MSG_PEEK) != b""
+        except OSError:
+            return False
+
+    def _wait(self, doc_id: str) -> None:
+        registry.get(doc_id)
+        body = self._body()
+        body = body if isinstance(body, dict) else {}
+        session = str(body.get("session") or "")
+        session = session if listeners_session_ok(session) else ""
+        cwd = str(body.get("cwd") or "")
+        cwd = cwd if cwd.startswith("/") and Path(cwd).is_dir() else ""
+        waiter = self.server.sender.board.wait(doc_id, session, cwd, self._client_alive,
+                                               self.server.wait_hold)
+        self._json(HTTPStatus.OK, {"prompt": waiter.prompt if waiter else None})
 
     def _api(self, method: str, rest: list[str], query: dict[str, list[str]]) -> None:
         if not rest:
             if method != "GET":
                 raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
-            docs = [self._with_running(d) for d in registry.summary()]
+            docs = [self._with_live(d) for d in registry.summary()]
             return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
         if len(rest) > 2:
@@ -242,10 +276,8 @@ class Handler(BaseHTTPRequestHandler):
                 items = [d for d in registry.summary() if d["id"] == doc_id]
                 if not items:
                     raise registry.UnknownDocument(f"no document {doc_id!r}")
-                return self._json(HTTPStatus.OK, self._with_running(items[0]))
+                return self._json(HTTPStatus.OK, self._with_live(items[0]))
             if method == "DELETE":
-                if doc_id in self.server.sender.running():
-                    raise sender.Busy("a session is running for this document")
                 delete = query.get("delete", ["0"])[0] in ("1", "true", "yes")
                 entry = registry.forget(doc_id, delete_file=delete)
                 log.info("forgot %s (%s)%s", doc_id, entry["path"],
@@ -262,7 +294,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(HTTPStatus.OK, {"annotations": items})
         if method == "POST" and action in ("send", "new-session"):
             result = self.server.sender.dispatch(doc_id, fresh=action == "new-session")
-            return self._json(HTTPStatus.ACCEPTED, result)
+            return self._json(HTTPStatus.OK, result)
+        if method == "POST" and action == "wait":
+            return self._wait(doc_id)
         if method == "POST" and action == "open":
             registry.get(doc_id)
             url = f"{self.server.base_url()}/docs/{doc_id}"
@@ -286,6 +320,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
 
 
+def listeners_session_ok(session: str) -> bool:
+    """A Claude Code session id as `annotate wait` sends it, or nothing."""
+    return bool(session) and len(session) <= 64 and \
+        session.replace("-", "").isalnum()
+
+
 def make_server(cfg: Config, *, port: int | None = None,
                 send: sender.Sender | None = None) -> AnnotateServer:
     try:
@@ -304,8 +344,6 @@ class _Stop:
 
 def serve(cfg: Config) -> int:
     srv = make_server(cfg)
-    for doc_id in sender.recover_stale():
-        log.info("recovered %s", doc_id)
 
     def on_signal(signum: int, frame: FrameType | None) -> None:
         _Stop.requested = True
@@ -323,7 +361,5 @@ def serve(cfg: Config) -> int:
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     srv.shutdown()
     srv.server_close()
-    running = srv.sender.running()
-    log.info("annotate daemon stopped%s", f" ({len(running)} session(s) interrupted)"
-             if running else "")
+    log.info("annotate daemon stopped")
     return 0

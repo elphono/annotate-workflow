@@ -10,9 +10,8 @@ Layout under `config.data_dir()` (default `~/.local/share/annotate`):
 repository, and a sidecar file would show up in `git status` and end up
 committed.
 
-**Two writers share these files**: the daemon (browser PUTs, sends finishing
-in background threads) and the CLI (`annotate register`, called by the Claude
-Code hook from any session). Every read-modify-write therefore runs under an
+**Two writers share these files**: the daemon (browser PUTs, sends) and the
+CLI (`annotate register`, called by the Claude Code hook from any session). Every read-modify-write therefore runs under an
 exclusive `flock` on `registry.lock`. `flock` locks belong to an open file
 description, so two threads of the daemon opening the lock file separately
 exclude each other as two processes would.
@@ -41,7 +40,7 @@ from typing import Any
 
 from . import config, htmldoc
 
-STATUSES = ("new", "annotated", "sent", "answered")
+STATUSES = ("new", "annotated", "delivered", "answered")
 MAX_TEXT = 20_000
 
 
@@ -155,8 +154,12 @@ def register(path: Path, session: str | None = None,
     """Add or refresh a document. Idempotent on the absolute path.
 
     `session=None` keeps the session already recorded; `session=""` clears it.
-    Re-registering resets the status to `new`, unless unsent annotations
-    exist: they are still waiting, and `new` would hide them.
+
+    The status follows what re-registering MEANS. The hook re-registers a
+    document every time a session writes it, so a write after a delivery is
+    the session's answer: `delivered` becomes `answered`, and stays so on
+    later writes. Unsent annotations win over both (`annotated`): they are
+    still waiting, and any other status would hide them.
     """
     path = path.expanduser().resolve()
     if not path.is_file():
@@ -181,8 +184,12 @@ def register(path: Path, session: str | None = None,
             "registered_at": now_iso(),
             "sent_at": entry.get("sent_at", ""),
         })
-        if entry.get("status") != "sent":
-            entry["status"] = "annotated" if pending else "new"
+        if pending:
+            entry["status"] = "annotated"
+        elif entry.get("status") in ("delivered", "answered"):
+            entry["status"] = "answered"
+        else:
+            entry["status"] = "new"
         docs[doc_id] = entry
         _write_docs(docs)
         return dict(entry)
@@ -252,7 +259,7 @@ def _clean(raw: object, index: int) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise InvalidAnnotations(f"annotation #{index} is not an object")
     out: dict[str, Any] = {}
-    for key in ("id", "selector", "quote", "note"):
+    for key in ("id", "selector", "quote", "note", "at"):
         value = raw.get(key, "")
         if not isinstance(value, str):
             raise InvalidAnnotations(f"annotation #{index}: {key} must be a string")
@@ -291,7 +298,7 @@ def replace_annotations(doc_id: str, incoming: object) -> list[dict[str, Any]]:
             item["sent_at"] = (known.get(item["id"]) or {}).get("sent_at", "") or ""
         _write_annotations(doc_id, cleaned)
         entry = docs[doc_id]
-        if pending(cleaned) and entry.get("status") != "sent":
+        if pending(cleaned):
             entry["status"] = "annotated"
         _write_docs(docs)
         return cleaned
@@ -328,8 +335,13 @@ def summary() -> list[dict[str, Any]]:
                                     key=lambda kv: kv[1].get("registered_at", ""),
                                     reverse=True):
             items = _read_annotations(doc_id)
+            try:
+                mtime = Path(entry["path"]).stat().st_mtime
+            except OSError:
+                mtime = None
             out.append({**entry,
                         "annotations": len(items),
                         "pending": len(pending(items)),
-                        "exists": Path(entry["path"]).is_file()})
+                        "exists": mtime is not None,
+                        "mtime": mtime})
         return out

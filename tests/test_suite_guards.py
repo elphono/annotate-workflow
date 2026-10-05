@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from annotate import config
+from annotate import claude, config
 
 
 def _decoy(folder: Path, name: str) -> str:
@@ -33,7 +33,7 @@ def test_a_real_claude_cannot_be_launched(tmp_path):
 
 
 def test_windows_programs_cannot_be_launched(tmp_path):
-    for program in ("cmd.exe", "powershell.exe", "wsl.exe", "explorer.exe",
+    for program in ("cmd.exe", "powershell.exe", "wsl.exe", "wt.exe", "explorer.exe",
                     "reg.exe", "systemctl", "wslview"):
         with pytest.raises(AssertionError, match="launches a real"):
             subprocess.Popen([_decoy(tmp_path, program)])
@@ -61,3 +61,7 @@ def test_kill_of_a_process_the_test_started_is_allowed():
 def test_the_data_directory_is_not_the_real_one(tmp_path):
     assert config.data_dir().is_relative_to(tmp_path)
     assert not config.data_dir().is_relative_to(Path.home() / ".local")
+
+
+def test_the_claude_transcripts_are_not_the_real_ones(tmp_path):
+    assert claude.projects_dir().is_relative_to(tmp_path)

@@ -106,8 +106,8 @@ tombe est ce qui servait l'appareil.</figcaption>
 <tr><td><code>tests/conftest.py</code> — aucun vrai <code>claude</code>, <code>ssh</code>, signal</td><td><span class="tag keep">repris</span></td><td>Étendu à <code>cmd.exe</code>, <code>powershell.exe</code>, <code>wsl.exe</code>, <code>systemctl</code> ; un signal n'atteint que les processus lancés par le test.</td></tr>
 <tr><td><code>rmpapier/cli.py</code> — <code>service</code></td><td><span class="tag adapt">adapté</span></td><td>Unité générée depuis l'environnement, Python lancé directement (jamais <code>uv run</code> : double SIGTERM mesuré le 2026-09-15). Elle est maintenant écrite, puis activée à la demande.</td></tr>
 <tr><td><code>rmpapier/plateau.py</code> + <code>plateau.ps1</code> (3 615 lignes)</td><td><span class="tag adapt">adapté</span></td><td><code>tray.py</code> + <code>tray.ps1</code> (≈ 310 lignes), qui ne parle qu'en HTTP. Leçons gardées : ASCII pur, pas de <code>ValidateSet</code>, <code>-d</code> sans guillemets, NUL de <code>wsl.exe</code>, cache des HICON, DPI.</td></tr>
-<tr><td><code>rmpapier/session.py</code> — reprendre, sinon rejouer une fois</td><td><span class="tag adapt">adapté</span></td><td><code>sender.py</code> : <code>--resume</code>, repli sur une session neuve avec « lis-le d'abord ». En arrière-plan : le démon ne bloque jamais.</td></tr>
-<tr><td>Ticket #14 — hook <code>Stop</code> + marqueur <code>&lt;!-- tablette --&gt;</code></td><td><span class="tag adapt">adapté</span></td><td>Hook <code>PostToolUse</code> : tout <code>.html</code> écrit sous un <code>docs/</code> du workspace est enregistré avec la session qui l'écrit. <code>RMSYNC_TOUR</code> devient <code>ANNOTATE_SESSION</code>.</td></tr>
+<tr><td><code>rmpapier/session.py</code> — reprendre, sinon rejouer une fois</td><td><span class="tag adapt">adapté</span></td><td><code>sender.py</code> : la session qui attend d'abord ; sinon un onglet de terminal qui reprend la session (<code>--resume</code>), ou en ouvre une neuve avec « lis-le d'abord » si elle a disparu. Plus aucune session en arrière-plan.</td></tr>
+<tr><td>Ticket #14 — hook <code>Stop</code> + marqueur <code>&lt;!-- tablette --&gt;</code></td><td><span class="tag adapt">adapté</span></td><td>Hook <code>PostToolUse</code> : tout <code>.html</code> écrit sous un <code>docs/</code> du workspace est enregistré avec la session qui l'écrit, et le hook dit à cette session de lancer <code>annotate wait</code>.</td></tr>
 <tr><td><code>rmpapier/oubli.py</code> — <code>forget [--delete]</code></td><td><span class="tag adapt">adapté</span></td><td>Même geste, côté registre ; refusé pendant qu'une session tourne sur le document.</td></tr>
 <tr><td><code>test_aucune_valeur_de_deploiement_n_est_en_dur</code></td><td><span class="tag adapt">adapté</span></td><td>Même balayage AST, étendu au port et au nom de distribution, avec un témoin qui doit déclencher.</td></tr>
 <tr><td><code>tools/mutate.py</code></td><td><span class="tag adapt">adapté</span></td><td>Réduit à six mutations dirigées, toujours sur une copie bornée.</td></tr>
@@ -163,8 +163,8 @@ tombe est ce qui servait l'appareil.</figcaption>
     <text x="684" y="384" class="svg-muted">barre, pastille ou CLI</text>
 
     <rect x="30" y="340" width="210" height="58" rx="9" fill="var(--paper)" stroke="var(--session)" stroke-width="2"/>
-    <text x="44" y="364" class="svg-ink" font-weight="700">7 · claude -p --resume</text>
-    <text x="44" y="384" class="svg-muted">corrige x.html sur place</text>
+    <text x="44" y="364" class="svg-ink" font-weight="700">7 · la session ouverte</text>
+    <text x="44" y="384" class="svg-muted">reçoit les notes, corrige</text>
   </g>
   <!-- arrows -->
   <g stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#arr)">
@@ -176,17 +176,18 @@ tombe est ce qui servait l'appareil.</figcaption>
     <path d="M670,369 L244,369"/>
     <path d="M135,340 L135,122"/>
   </g>
-  <text x="312" y="358" class="svg-muted" font-size="13">POST /send : le démon lance la session</text>
+  <text x="312" y="358" class="svg-muted" font-size="13">POST /send : livré à annotate wait</text>
   <text x="146" y="236" class="svg-muted" font-size="13">nouvelle</text>
   <text x="146" y="252" class="svg-muted" font-size="13">version</text>
 </svg>
-<figcaption>Les étapes 2 et 7 sont automatiques ; l'utilisateur ne fait que 5 et 6. L'étape 7 tourne en
-arrière-plan : la page et la pastille montrent « session running » puis « answered ».</figcaption>
+<figcaption>Les étapes 2 et 7 sont automatiques ; l'utilisateur ne fait que 5 et 6. Depuis le 2026-10-05,
+l'étape 7 se passe <strong>dans la conversation ouverte</strong>, celle que l'utilisateur regarde (voir
+<a href="#session-ouverte">session ouverte</a>) ; plus rien ne tourne en arrière-plan sans écran.</figcaption>
 </figure>
-<h3 id="session-ouverte">Si la session est encore ouverte dans un terminal</h3>
+<h3 id="session-ouverte">Si la session est encore ouverte dans un terminal — fait le 2026-10-05</h3>
 <figure>
 <svg viewBox="0 0 900 230" role="img" aria-labelledby="live-t">
-  <title id="live-t">Aiguillage proposé de l'envoi : la session ouverte d'abord, la reprise en arrière-plan sinon</title>
+  <title id="live-t">Aiguillage de l'envoi : la session qui attend d'abord, un onglet de terminal sinon</title>
   <defs>
     <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
@@ -198,18 +199,18 @@ arrière-plan : la page et la pastille montrent « session running » puis « an
     <text x="24" y="130" class="svg-muted">barre, pastille, CLI</text>
 
     <rect x="226" y="86" width="260" height="58" rx="9" fill="var(--paper)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="6 4"/>
-    <text x="240" y="110" class="svg-ink" font-weight="700">la session est-elle vivante</text>
-    <text x="240" y="130" class="svg-ink" font-weight="700">dans un terminal ?</text>
+    <text x="240" y="110" class="svg-ink" font-weight="700">une session attend-elle ?</text>
+    <text x="240" y="130" class="svg-muted">annotate wait, en arrière-plan</text>
 
     <rect x="530" y="14" width="360" height="74" rx="9" fill="var(--session-soft)" stroke="var(--session)" stroke-width="2"/>
-    <text x="544" y="38" fill="var(--session)" font-weight="700">oui · livrer à cette session (à faire)</text>
-    <text x="544" y="58" class="svg-ink">les notes arrivent dans le terminal ouvert,</text>
-    <text x="544" y="76" class="svg-ink">dans la conversation que l'utilisateur voit</text>
+    <text x="544" y="38" fill="var(--session)" font-weight="700">oui · livré à cette session</text>
+    <text x="544" y="58" class="svg-ink">la commande rend la main avec les notes :</text>
+    <text x="544" y="76" class="svg-ink">Claude Code réveille la conversation ouverte</text>
 
     <rect x="530" y="142" width="360" height="74" rx="9" fill="var(--annotate-soft)" stroke="var(--annotate)" stroke-width="2"/>
-    <text x="544" y="166" fill="var(--annotate)" font-weight="700">non · claude -p --resume en arrière-plan</text>
-    <text x="544" y="186" class="svg-ink">aujourd'hui, c'est le cas de tout envoi :</text>
-    <text x="544" y="204" class="svg-ink">aucun terminal ouvert, une session sans écran</text>
+    <text x="544" y="166" fill="var(--annotate)" font-weight="700">non · un onglet Windows Terminal</text>
+    <text x="544" y="186" class="svg-ink">claude --resume, interactif et visible ;</text>
+    <text x="544" y="204" class="svg-ink">session neuve si elle a disparu d'ici</text>
   </g>
   <g stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#arr2)">
     <path d="M180,115 L222,115"/>
@@ -217,24 +218,28 @@ arrière-plan : la page et la pastille montrent « session running » puis « an
     <path d="M486,125 L526,176"/>
   </g>
 </svg>
-<figcaption>Aujourd'hui l'envoi n'ouvre aucun terminal, mais il ne regarde pas non plus si la session est
-ouverte : il lance à côté d'elle un second <code>claude</code> sur la même conversation. Le terminal ouvert
-ne voit ni les notes ni la correction.</figcaption>
+<figcaption>Avant ce correctif, l'envoi lançait à côté de la session ouverte un second <code>claude -p</code>
+sur la même conversation, sans écran : mesuré sur le premier envoi réel, 2 min 45 s et 1,71 $, une
+correction et un commit, et rien de visible pour l'utilisateur, qui attendait devant le terminal ouvert.</figcaption>
 </figure>
 <div class="scroll">
 <table>
-<thead><tr><th>Pièce à construire</th><th>Mécanisme candidat</th><th>Ce qu'il en coûte, ce qui reste à mesurer</th></tr></thead>
+<thead><tr><th>Pièce</th><th>Mécanisme</th><th>Pourquoi lui</th></tr></thead>
 <tbody>
-<tr><td>Savoir qu'une session est vivante</td><td>hooks <code>SessionStart</code> / <code>SessionEnd</code> qui l'inscrivent au registre avec son pid ; le démon vérifie que le pid vit encore</td><td>deux hooks de plus, du même modèle que <code>register-on-write</code>. Une session tuée sans <code>SessionEnd</code> doit être reconnue morte (pid absent), pas crue vivante.</td></tr>
-<tr><td>Livrer sans attendre</td><td><em>channel</em> Claude Code : un serveur MCP qui pousse un message dans la session ouverte</td><td>fonction en aperçu, à vérifier : <code>--channels</code> n'apparaît pas dans <code>claude --help</code> sur cette machine. La session doit avoir été lancée avec ce serveur.</td></tr>
-<tr><td>Livrer au prochain tour</td><td>boîte aux lettres au registre + hook <code>UserPromptSubmit</code> qui injecte les notes en attente</td><td>bibliothèque standard seulement, mais passif : rien n'arrive tant que l'utilisateur ne tape rien dans le terminal.</td></tr>
+<tr><td><strong>retenu</strong> · attendre les notes</td><td><code>annotate wait &lt;id&gt;</code>, lancé par la session comme commande d'arrière-plan : une requête tenue par le démon (<em>long-poll</em>), qui rend les notes à l'envoi</td><td>Claude Code réveille la session à la fin d'une commande d'arrière-plan, et lui en donne la sortie : la livraison est <strong>immédiate</strong>, sans aperçu à activer ni hook de plus. La session la relance après chaque lot (le prompt le lui dit).</td></tr>
+<tr><td><strong>retenu</strong> · savoir qu'elle est vivante</td><td>la requête tenue elle-même : le démon vérifie que sa connexion n'est pas fermée avant de livrer</td><td>une session fermée tue sa commande, donc sa connexion : jamais de notes livrées à personne. <code>listening</code> dans l'API, et la barre le dit.</td></tr>
+<tr><td><strong>retenu</strong> · la dire au hook</td><td><code>annotate register --hook</code> rend un <code>additionalContext</code> : « lance <code>annotate wait</code> »</td><td>sauf si une session attend déjà ce document : sinon chaque correction répéterait la consigne.</td></tr>
+<tr><td>écarté · savoir qu'une session est vivante</td><td>hooks <code>SessionStart</code> / <code>SessionEnd</code> qui l'inscrivent au registre avec son pid ; le démon vérifie que le pid vit encore</td><td>deux hooks de plus, du même modèle que <code>register-on-write</code>. Une session tuée sans <code>SessionEnd</code> doit être reconnue morte (pid absent), pas crue vivante.</td></tr>
+<tr><td>écarté · livrer sans attendre</td><td><em>channel</em> Claude Code : un serveur MCP qui pousse un message dans la session ouverte</td><td>fonction en aperçu, à vérifier : <code>--channels</code> n'apparaît pas dans <code>claude --help</code> sur cette machine. La session doit avoir été lancée avec ce serveur.</td></tr>
+<tr><td>écarté · livrer au prochain tour</td><td>boîte aux lettres au registre + hook <code>UserPromptSubmit</code> qui injecte les notes en attente</td><td>bibliothèque standard seulement, mais passif : rien n'arrive tant que l'utilisateur ne tape rien dans le terminal.</td></tr>
 </tbody>
 </table>
 </div>
-<div class="verdict"><strong>Proposé — non codé.</strong> Aiguiller l'envoi sur la vivacité de la session :
-vivante, les notes lui sont livrées ; absente, la reprise en arrière-plan d'aujourd'hui reste le repli. Le
-choix entre <em>channel</em> (immédiat, en aperçu) et boîte aux lettres (simple, passive) est à trancher
-après avoir vérifié que les <em>channels</em> sont disponibles sur ce compte.</div>
+<div class="verdict"><strong>Fait.</strong> Une session qui attend reçoit les notes dans sa conversation ;
+sinon un <strong>onglet</strong> de Windows Terminal reprend la session, interactif et visible (un onglet et
+non une fenêtre : <code>launchMode: fullscreen</code> ne vaut que pour les fenêtres neuves). Le repli en
+arrière-plan (<code>claude -p</code>) a disparu. Mesuré en route : <code>wt.exe</code> coupe sa ligne de commande
+au <code>;</code>, d'où un script intermédiaire sans aucun <code>;</code> dans les arguments.</div>
 <figure>
 <svg viewBox="0 0 900 190" role="img" aria-labelledby="anchor-t">
   <title id="anchor-t">L'ancrage d'une épingle : sélecteur, citation, décalage</title>
@@ -258,12 +263,12 @@ après avoir vérifié que les <em>channels</em> sont disponibles sur ce compte.
 <figcaption>Si le document change et que le sélecteur ne désigne plus rien, la note n'est pas perdue : elle
 passe dans la liste « orphelines » de la barre, et part avec sa citation et la mention « Anchor: lost ».</figcaption>
 </figure>
-<h3 id="precision">L'ancre est parfois trop large pour dire ce que la note désigne</h3>
+<h3 id="precision">L'ancre est parfois trop large pour dire ce que la note désigne — fait le 2026-10-05</h3>
 <figure>
 <svg viewBox="0 0 900 230" role="img" aria-labelledby="prec-t">
-  <title id="prec-t">Ancre trop large aujourd'hui, ancre resserrée sur l'élément pointé demain</title>
+  <title id="prec-t">Ancre trop large avant, le mot ou l'étiquette sous le clic maintenant</title>
   <g font-size="14">
-    <text x="20" y="24" fill="var(--risk)" font-weight="700">Aujourd'hui · constaté sur la note #1 de cet envoi</text>
+    <text x="20" y="24" fill="var(--risk)" font-weight="700">Avant · constaté sur la note #1 du premier envoi</text>
     <rect x="20" y="38" width="420" height="120" rx="8" fill="none" stroke="var(--risk)" stroke-width="2" stroke-dasharray="6 4"/>
     <rect x="36" y="54" width="110" height="34" rx="6" fill="var(--session-soft)"/>
     <rect x="166" y="54" width="110" height="34" rx="6" fill="var(--annotate-soft)"/>
@@ -276,7 +281,7 @@ passe dans la liste « orphelines » de la barre, et part avec sa citation et la
     <text x="20" y="202" class="svg-muted">citation = ses 120 premiers caractères ;</text>
     <text x="20" y="220" class="svg-muted">la session doit deviner l'endroit visé</text>
 
-    <text x="470" y="24" fill="var(--keep)" font-weight="700">Proposé · l'élément sous le clic</text>
+    <text x="470" y="24" fill="var(--keep)" font-weight="700">Fait · ce qui est sous le clic</text>
     <rect x="470" y="38" width="420" height="120" rx="8" fill="none" stroke="var(--line)" stroke-width="2"/>
     <rect x="486" y="54" width="110" height="34" rx="6" fill="var(--session-soft)"/>
     <rect x="616" y="54" width="110" height="34" rx="6" fill="var(--annotate-soft)"/>
@@ -285,9 +290,9 @@ passe dans la liste « orphelines » de la barre, et part avec sa citation et la
     <text x="496" y="130" class="svg-ink" font-size="13">7 · claude -p --resume</text>
     <circle cx="626" cy="112" r="11" fill="var(--annotate)"/>
     <text x="622" y="117" fill="#fff" font-size="12" font-weight="700">1</text>
-    <text x="470" y="182" class="svg-ink">ancre = le bloc pointé, dans le schéma</text>
-    <text x="470" y="202" class="svg-muted">prompt : « Pointed at: "7 · claude -p --resume" »</text>
-    <text x="470" y="220" class="svg-muted">en plus du contexte large, pas à sa place</text>
+    <text x="470" y="182" class="svg-ink">l'ancre reste stable, le prompt précise :</text>
+    <text x="470" y="202" class="svg-muted">« in the figure, on the label "7 · claude -p…" »</text>
+    <text x="470" y="220" class="svg-muted">en plus de la section et de la citation</text>
   </g>
 </svg>
 <figcaption>Même défaut dans le texte : un Alt+clic au milieu d'un long paragraphe cite ses 120 premiers
@@ -296,18 +301,17 @@ est assez petite.</figcaption>
 </figure>
 <div class="scroll">
 <table>
-<thead><tr><th>Où l'on clique</th><th>Ancre aujourd'hui</th><th>Proposé</th></tr></thead>
+<thead><tr><th>Où l'on clique</th><th>L'ancre (inchangée)</th><th>Ce que la session reçoit en plus, depuis le 2026-10-05</th></tr></thead>
 <tbody>
-<tr><td>dans un schéma SVG</td><td>le <code>&lt;svg&gt;</code> le plus extérieur</td><td>le <code>&lt;text&gt;</code> ou le groupe sous le clic, sinon le texte le plus proche du point</td></tr>
-<tr><td>dans un long paragraphe</td><td>le paragraphe, cité depuis son début</td><td>la phrase sous le clic (<code>caretPositionFromPoint</code>), le mot pointé marqué</td></tr>
-<tr><td>sur une sélection, puis Alt+clic</td><td>la sélection, exactement</td><td>inchangé : c'est déjà le geste précis disponible aujourd'hui — prévu par le code, mais aucun test ne l'exerce</td></tr>
+<tr><td>dans un schéma SVG</td><td>le <code>&lt;svg&gt;</code> le plus extérieur</td><td>l'étiquette sous le clic, sinon la plus proche : <code>in the figure, next to the label "Browser"</code></td></tr>
+<tr><td>dans un long paragraphe</td><td>le paragraphe, cité depuis son début</td><td>le mot cliqué entre <code>[[ ]]</code>, dans quarante caractères de contexte coupés sur des mots entiers : <code>… the [[Second]] paragraph, which …</code></td></tr>
+<tr><td>sur une sélection, puis Alt+clic</td><td>la sélection, exactement</td><td>la sélection, exactement — et rien de plus : elle dit déjà ce qui est visé</td></tr>
 </tbody>
 </table>
 </div>
-<div class="verdict"><strong>Proposé — non codé.</strong> Le prompt garderait la section et le contexte
-large, et y ajouterait une ligne « Pointed at » qui nomme ce qui était sous le pointeur : la session n'a plus
-à deviner. En attendant, sélectionner le passage avant l'Alt+clic devrait donner une citation exacte : le code le
-prévoit, aucun test ne l'a encore vérifié.</div>
+<div class="verdict"><strong>Fait.</strong> L'épingle reste ancrée à l'élément (c'est ce qui la fait survivre
+aux corrections) ; le prompt porte en plus une ligne <code>Clicked on (the word between [[ ]])</code>. Éprouvé dans
+Chromium sur un paragraphe et sur une figure SVG, et par mutation.</div>
 <details><summary>Le contrat HTTP, et pourquoi aucune page web ne peut déclencher un envoi</summary>
 <p><code>GET /docs/&lt;id&gt;</code> relit le fichier à chaque requête et injecte <code>annotate.js</code> ;
 <code>GET /docs/&lt;id&gt;/files/…</code> sert les images relatives et refuse tout chemin qui sort du dossier
@@ -382,18 +386,17 @@ réutiliserait alors <code>annotate.js</code> et l'API du démon telles quelles.
 <thead><tr><th></th><th>Affirmation</th><th>Mesure</th></tr></thead>
 <tbody>
 <tr><td class="ok">✓</td><td>Alt+clic → note enregistrée ; après rechargement l'épingle revient au point cliqué</td><td>Chromium 151 headless (Playwright) : écart ≤ 2 px exigé et tenu</td></tr>
-<tr><td class="no">⚠</td><td>…mais la note ne dit pas toujours ce qu'elle désigne : l'ancre peut être bien plus large que le point cliqué</td><td>constaté sur un envoi réel : une épingle posée sur le schéma du flux a été citée comme tout le schéma (voir <a href="#precision">b · ancre trop large</a>)</td></tr>
+<tr><td class="ok">✓</td><td>…et la note dit ce qu'elle désigne : le mot cliqué, ou l'étiquette de figure la plus proche</td><td>Chromium headless : <code>[[Second]] paragraph, which the test …</code> et <code>next to the label "Browser"</code> (voir <a href="#precision">ancre trop large</a>)</td></tr>
 <tr><td class="ok">✓</td><td>Une note dont l'ancre a disparu reste listée et survit aux sauvegardes suivantes</td><td>même test ; la mutation qui la retire du modèle le fait tomber</td></tr>
 <tr><td class="ok">✓</td><td>Images relatives chargées, lien <code>#section</code> reste sur la page, barre lisible à 390 px</td><td>même test, captures regardées</td></tr>
-<tr><td class="ok">✓</td><td>Envoi : seules les notes jamais envoyées partent ; repli sur session neuve si la session a disparu</td><td>faux <code>claude</code> exécutable, lancé par le vrai <code>Popen</code> ; six mutations dirigées, six tuées</td></tr>
-<tr><td class="ok">✓</td><td>Un vrai envoi de bout en bout : note posée par l'API, démon systemd, <code>claude -p</code> en session neuve</td><td>23 s, 0,47 $ rapportés par <code>claude</code> ; fichier corrigé sur place, statut <code>answered</code>, session enregistrée</td></tr>
-<tr><td class="no">⚠</td><td>La session lancée par un envoi suit les règles globales : elle a <strong>commité</strong> sa correction</td><td>mesuré sur cet envoi (commit <code>aa8a73b</code>) ; une fois le dépôt doté d'un remote, elle poussera aussi</td></tr>
+<tr><td class="ok">✓</td><td>Envoi : seules les notes jamais envoyées partent, à la session qui attend, ou dans un onglet qui la reprend ; session neuve si elle a disparu</td><td>vrai <code>annotate wait</code> en sous-processus, vrai script d'onglet exécuté par un faux <code>wt.exe</code>, faux <code>claude</code> ; mutations dirigées, voir <code>tools/mutate.py</code></td></tr>
+<tr><td class="no">⚠</td><td>Le premier envoi réel n'a <strong>rien montré</strong> : la session a été reprise en arrière-plan</td><td>2026-10-05 : 2 min 45 s, 1,71 $, l'étude corrigée et commitée (<code>df5136e</code>) pendant que l'utilisateur attendait devant la session ouverte. C'est ce qui a fait retirer l'arrière-plan.</td></tr>
 <tr><td class="ok">✓</td><td>La Custom Highlight API surligne sans découper le nœud texte</td><td>Chromium 151 : <code>CSS.highlights.size = 1</code>, nœud texte unique après coup</td></tr>
 <tr><td class="ok">✓</td><td>Navigateur par défaut de cette machine</td><td>Chrome 154 (<code>ChromeHTML</code>) ; Edge 154 présent</td></tr>
 <tr><td class="no">✗</td><td>Alt+clic dans le Chrome Windows réel</td><td>non mesuré : testé sous Linux headless. Sous Windows, Alt seul peut donner le focus au menu du navigateur.</td></tr>
 <tr><td class="no">✗</td><td>L'icône de la pastille, son menu, ses couleurs</td><td>non regardés : pas d'écran. Syntaxe et mode <code>-Once</code> vérifiés.</td></tr>
 <tr><td class="no">✗</td><td>Le hook dans une vraie session Claude Code</td><td>éprouvé avec un JSON fabriqué ; les hooks se chargent au démarrage d'une session.</td></tr>
-<tr><td class="no">✗</td><td>Reprendre une session encore ouverte dans un terminal</td><td>non mesuré : deux écrivains sur la même conversation. Il faudrait livrer à la session ouverte plutôt qu'à côté d'elle (voir <a href="#session-ouverte">b · session ouverte</a>).</td></tr>
+<tr><td class="no">⚠</td><td>Les notes arrivent dans la session ouverte, sans la dédoubler</td><td>codé et éprouvé sur de vrais processus (voir <a href="#session-ouverte">session ouverte</a>) ; le premier vrai envoi depuis Chrome Windows reste à faire</td></tr>
 </tbody>
 </table>
 </div>

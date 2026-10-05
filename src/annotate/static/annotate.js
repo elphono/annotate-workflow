@@ -11,6 +11,13 @@
  *
  * The UI lives in a shadow root: the documents style `button`, `textarea`
  * and `div` freely, and none of it must reach the bar or the bubble.
+ *
+ * A pin is anchored to an ELEMENT (stable across edits), which can be much
+ * wider than what the note is about: a whole table cell, a whole figure.
+ * `at` therefore records the word under the cursor, in context
+ * ("… the [[Second]] paragraph, which …"),
+ * or, in a figure, the label nearest to the click (user note, 2026-10-05:
+ * "the element chosen is too wide to say what the note designates").
  */
 (() => {
   'use strict';
@@ -24,9 +31,12 @@
   const HEADERS = { 'Content-Type': 'application/json', 'X-Annotate': 'overlay' };
   const QUOTE_MAX = 120;
   const SELECTION_MAX = 600;
+  const AT_SPAN = 40;
+  const BLOCKS = 'p,li,td,th,h1,h2,h3,h4,h5,h6,dt,dd,blockquote,figcaption,pre,caption,summary';
   const STATUS_TEXT = {
-    new: 'no note yet', annotated: 'notes waiting', sent: 'session running',
-    answered: 'answered',
+    new: 'no note yet', annotated: 'notes waiting to be sent',
+    delivered: 'notes delivered, the session is on it',
+    answered: 'the session edited the document',
   };
 
   let annotations = [];
@@ -35,7 +45,8 @@
   let editing = null;          // { item, isNew }
   let suppressClick = false;
   let collapsed = false;
-  let lastStatus = null;
+  let loadedMtime = null;      // the file as this page shows it
+  let changed = false;         // the file on disk is newer than the page
   let saving = Promise.resolve();
 
   // -- DOM scaffolding -----------------------------------------------------
@@ -92,6 +103,71 @@
     return parts.join(' > ');
   }
 
+  // The word under the cursor between [[ ]], with whole words of context on
+  // each side, read in the enclosing block so that <strong>/<code>
+  // boundaries do not cut them.
+  function textAt(e) {
+    let node = null;
+    let offset = 0;
+    if (document.caretRangeFromPoint) {
+      const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range) { node = range.startContainer; offset = range.startOffset; }
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (pos) { node = pos.offsetNode; offset = pos.offset; }
+    }
+    if (node && node.nodeType === 3 && onText(node, e)) {
+      const block = (node.parentElement.closest(BLOCKS)) || node.parentElement;
+      const before = document.createRange();
+      before.selectNodeContents(block);
+      before.setEnd(node, offset);
+      const all = block.textContent;
+      const at = before.toString().length;
+      let start = at;
+      let end = at;
+      while (start > 0 && !/\s/.test(all[start - 1])) start--;
+      while (end < all.length && !/\s/.test(all[end])) end++;
+      let head = all.slice(Math.max(0, start - AT_SPAN), start);
+      let tail = all.slice(end, end + AT_SPAN);
+      const cutHead = start - AT_SPAN > 0;
+      const cutTail = end + AT_SPAN < all.length;
+      if (cutHead) head = head.replace(/^\S*\s/, '');   // no half word at the edges
+      if (cutTail) tail = tail.replace(/\s\S*$/, '');
+      const word = all.slice(start, end);
+      return squash((cutHead ? '… ' : '') + head + (word ? '[[' + word + ']]' : '[[ ]]') +
+        tail + (cutTail ? ' …' : ''));
+    }
+    const svg = e.target.closest && e.target.closest('svg');
+    if (svg) {
+      let best = null;
+      let distance = Infinity;
+      for (const label of svg.querySelectorAll('text')) {
+        const b = label.getBoundingClientRect();
+        const dx = Math.max(b.left - e.clientX, 0, e.clientX - b.right);
+        const dy = Math.max(b.top - e.clientY, 0, e.clientY - b.bottom);
+        const d = Math.hypot(dx, dy);
+        if (d < distance && squash(label.textContent)) { distance = d; best = label; }
+      }
+      if (best) {
+        return 'in the figure, ' + (distance === 0 ? 'on' : 'next to') + ' the label "' +
+          squash(best.textContent) + '"';
+      }
+    }
+    return '';
+  }
+
+  // caretRangeFromPoint snaps to the nearest text even in blank space: the
+  // click must be ON the text node's boxes to count.
+  function onText(node, e) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    for (const r of range.getClientRects()) {
+      if (e.clientX >= r.left - 2 && e.clientX <= r.right + 2 &&
+          e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2) return true;
+    }
+    return false;
+  }
+
   function resolve(selector) {
     try {
       return selector ? document.querySelector(selector) : null;
@@ -146,15 +222,8 @@
       message = 'Daemon unreachable: ' + err.message;
       return;
     }
-    const busy = entry.status === 'sent' || entry.running;
-    if (lastStatus && (lastStatus === 'sent') && !busy) {
-      const data = await call('GET', '/annotations');
-      annotations = data.annotations;
-      message = entry.status === 'answered'
-        ? 'The session answered: reload to see its changes.'
-        : 'The session ended without answering: ' + (entry.last_error || 'see the daemon log');
-    }
-    lastStatus = busy ? 'sent' : entry.status;
+    if (loadedMtime === null) loadedMtime = entry.mtime;
+    else if (entry.mtime && entry.mtime !== loadedMtime) changed = true;
   }
 
   // -- editor bubble -----------------------------------------------------------
@@ -166,7 +235,7 @@
     box.style.left = Math.max(8, Math.min(x, window.innerWidth + window.scrollX - 330)) + 'px';
     box.style.top = (y + 14) + 'px';
     const head = make('div', 'bubble-head', '#' + item.number + (sent ? ' · sent' : ''));
-    const quote = make('div', 'bubble-quote', item.quote ? '“' + item.quote + '”' : '');
+    const quote = make('div', 'bubble-quote', item.at ? item.at : (item.quote ? '“' + item.quote + '”' : ''));
     const area = make('textarea', 'bubble-text');
     area.value = item.note || '';
     area.readOnly = sent;
@@ -290,24 +359,32 @@
     bar.append(top);
     if (collapsed) return;
 
-    const busy = entry && (entry.status === 'sent' || entry.running);
+    const busy = entry && entry.status === 'delivered';
     const status = make('div', 'status' + (busy ? ' busy' : ''),
-      'Status: ' + (entry ? (busy ? STATUS_TEXT.sent : (STATUS_TEXT[entry.status] || entry.status)) : '…'));
+      'Status: ' + (entry ? (STATUS_TEXT[entry.status] || entry.status) : '…'));
     bar.append(status);
+    if (entry) {
+      bar.append(make('div', 'listening' + (entry.listening ? ' on' : ''),
+        entry.listening
+          ? 'An open session listens: Send delivers the notes to it.'
+          : 'No open session listens: Send resumes its session in a terminal tab.'));
+    }
 
     const actions = make('div', 'bar-actions');
     const send = make('button', 'primary', 'Send to session');
     send.addEventListener('click', () => trigger('send'));
     const fresh = make('button', '', 'New session');
-    fresh.title = 'Send the notes to a NEW Claude Code session';
+    fresh.title = 'Open the notes in a NEW Claude Code session, in a terminal tab';
     fresh.addEventListener('click', () => trigger('new-session'));
     actions.append(send, fresh);
-    if (message.startsWith('The session answered')) {
-      const reload = make('button', '', 'Reload');
+    if (changed) {
+      const reload = make('button', 'primary', 'Reload');
+      reload.title = 'The document changed on disk since this page was loaded';
       reload.addEventListener('click', () => location.reload());
       actions.append(reload);
     }
     bar.append(actions);
+    if (changed) bar.append(make('div', 'message', 'The document changed on disk: reload to see it.'));
 
     if (orphans.length) {
       const list = make('div', 'orphans');
@@ -332,9 +409,10 @@
     await saving;
     try {
       const result = await call('POST', '/' + action);
-      message = result.count + ' note(s) sent to ' +
-        (result.fresh ? 'a new session' : 'the producing session') + '.';
-      lastStatus = 'sent';
+      message = result.target === 'session'
+        ? result.count + ' note(s) delivered to the open session: it answers there.'
+        : result.count + ' note(s) opened in a terminal tab' +
+          (result.fresh ? ', in a new session.' : ': no open session listened, so its session was resumed there.');
       const data = await call('GET', '/annotations');
       annotations = data.annotations;
       await refreshEntry();
@@ -360,6 +438,7 @@
     const item = {
       id, number, selector: selectorFor(anchor),
       quote: selection ? selection.slice(0, SELECTION_MAX) : squash(anchor.innerText || anchor.textContent).slice(0, QUOTE_MAX),
+      at: selection ? '' : textAt(e),
       offset_x: Math.round(e.clientX - rect.left),
       offset_y: Math.round(e.clientY - rect.top),
       note: '', created_at: new Date().toISOString(), sent_at: '',
@@ -397,8 +476,7 @@
   async function poll() {
     await refreshEntry();
     if (!editing) render();
-    const busy = entry && (entry.status === 'sent' || entry.running);
-    setTimeout(poll, busy ? 3000 : 15000);
+    setTimeout(poll, 4000);
   }
 
   (async () => {
@@ -410,7 +488,6 @@
     }
     await refreshEntry();
     render();
-    const busy = entry && (entry.status === 'sent' || entry.running);
-    setTimeout(poll, busy ? 3000 : 15000);
+    setTimeout(poll, 4000);
   })();
 })();

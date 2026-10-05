@@ -1,85 +1,95 @@
 """Test doubles shared by several test files.
 
-`FakeProc.communicate(input=None, timeout=None)` has the REAL signature of
-`subprocess.Popen.communicate`; `test_sender.test_the_double_matches_popen`
-compares them.
+`RecordingOpener.__call__` has the REAL signature of
+`terminal.open_session`; `test_sender.test_the_opener_double_matches_the_real_one`
+compares them. A double that accepts what the original refuses lets a wrong
+call pass (remarkable-sync paid for one with the whole machine, 2026-08-23).
+
+The fake executables are real programs, launched by the real code, through
+real pipes. Only their NAMES are fake: the suite guard refuses any program
+named `claude` or `wt.exe`.
 """
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
+
+from annotate import terminal
 
 
-class FakeProc:
-    def __init__(self, script, argv, kwargs):
-        self.script, self.argv, self.kwargs = script, argv, kwargs
-        self.pid = 424242
-        self.returncode = None
-        self.stdin_text = None
+class RecordingOpener:
+    def __init__(self, fail: Exception | None = None) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.fail = fail
 
-    def communicate(self, input=None, timeout=None):
-        if self.stdin_text is None:
-            self.stdin_text = input
-        outcome = self.script(self)
-        if isinstance(outcome, BaseException):
-            raise outcome
-        self.returncode, out, err = outcome
-        return out, err
-
-
-class FakePopen:
-    """Records every launch; `script(proc)` decides each outcome."""
-
-    def __init__(self, *scripts):
-        self.scripts = list(scripts)
-        self.procs: list[FakeProc] = []
-
-    def __call__(self, argv, **kwargs):
-        proc = FakeProc(self.scripts.pop(0), argv, kwargs)
-        self.procs.append(proc)
-        return proc
-
-
-def ok(session="sess-new"):
-    return lambda proc: (0, json.dumps({"session_id": session, "result": "done"}), "")
+    def __call__(self, doc_id: str, cwd: str, claude_bin: str, resume: str | None,
+                 prompt: str) -> str:
+        self.calls.append({"doc_id": doc_id, "cwd": cwd, "claude_bin": claude_bin,
+                           "resume": resume, "prompt": prompt})
+        if self.fail is not None:
+            raise self.fail
+        return "fake-wt.exe"
 
 
 FAKE_CLAUDE = '''#!{python}
-"""A stand-in for `claude -p`: records what it received, answers like it."""
+"""A stand-in for an interactive `claude`: records how it was started."""
 import json, os, sys
-argv = sys.argv[1:]
-prompt = sys.stdin.read()
-record = {{"argv": argv, "cwd": os.getcwd(), "stdin": prompt,
-          "marker": os.environ.get("ANNOTATE_SESSION", "")}}
 with open({log!r}, "a", encoding="utf-8") as handle:
-    handle.write(json.dumps(record) + "\\n")
-if {gone!r} and "--resume" in argv:
-    sys.stderr.write("No conversation found with session ID: " + argv[-1] + "\\n")
-    sys.exit(1)
-print(json.dumps({{"type": "result", "is_error": False, "result": "done",
-                  "session_id": "fake-session-42", "total_cost_usd": 0.0123}}))
+    handle.write(json.dumps({{"argv": sys.argv[1:], "cwd": os.getcwd()}}) + "\\n")
+'''
+
+FAKE_WT = '''#!{python}
+"""A stand-in for wt.exe AND the wsl.exe it starts: checks the shape of the
+call, then runs the script the way `wsl.exe -e bash -l <script>` would
+(without -l: the test must not load the user's profile)."""
+import json, subprocess, sys
+argv = sys.argv[1:]
+with open({log!r}, "a", encoding="utf-8") as handle:
+    handle.write(json.dumps(argv) + "\\n")
+tail = argv[argv.index("--") + 1:]
+assert tail[0] == "wsl.exe" and tail[1] == "-d" and tail[3:6] == ["-e", "bash", "-l"], tail
+sys.exit(subprocess.run(["bash", tail[6]]).returncode)
 '''
 
 
-def write_fake_claude(folder, *, gone: bool = False):
-    """Write an executable named `fake-claude` (NOT `claude`: the suite guard
-    refuses that name) and return (path, log path)."""
-    import sys
-    from pathlib import Path
-
-    folder = Path(folder)
+def _write(folder: Path, name: str, text: str) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    path.write_text(text, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def write_fake_claude(folder) -> tuple[Path, Path]:
+    """`fake-claude`, and the log it appends {argv, cwd} to."""
+    folder = Path(folder)
     log = folder / "fake-claude.log"
-    script = folder / "fake-claude"
-    script.write_text(FAKE_CLAUDE.format(python=sys.executable, log=str(log),
-                                         gone=gone), encoding="utf-8")
-    script.chmod(0o755)
-    return script, log
+    return _write(folder, "fake-claude",
+                  FAKE_CLAUDE.format(python=sys.executable, log=str(log))), log
 
 
-def read_log(log):
-    from pathlib import Path
+def write_fake_wt(folder, monkeypatch) -> Path:
+    """`fake-wt.exe` on the PATH, and terminal.WT pointing at it; returns its log."""
+    folder = Path(folder)
+    log = folder / "fake-wt.log"
+    _write(folder, "fake-wt.exe", FAKE_WT.format(python=sys.executable, log=str(log)))
+    monkeypatch.setenv("PATH", f"{folder}:{__import__('os').environ['PATH']}")
+    monkeypatch.setattr(terminal, "WT", "fake-wt.exe")
+    return log
 
+
+def read_log(log) -> list:
     path = Path(log)
     if not path.exists():
         return []
     return [json.loads(line) for line in path.read_text().splitlines() if line]
+
+
+def transcript(projects: Path, session: str, *, folder: str = "-home-x-repo",
+               lines: tuple[str, ...] = ('{"type":"user","message":"hi"}',)) -> Path:
+    """A Claude Code transcript as `claude.resumable` reads it."""
+    path = projects / folder / f"{session}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path

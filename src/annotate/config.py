@@ -10,24 +10,23 @@ Precedence, highest first: environment variable, config file, default.
 | Field          | Env variable             | Default                          |
 |----------------|--------------------------|----------------------------------|
 | port           | ANNOTATE_PORT            | 8765                             |
-| send_timeout   | ANNOTATE_SEND_TIMEOUT    | 1800 seconds                     |
 | claude_bin     | ANNOTATE_CLAUDE          | "claude" (resolved on the PATH)  |
 | data_dir       | ANNOTATE_DATA_DIR        | ~/.local/share/annotate          |
 | (config file)  | ANNOTATE_CONFIG          | ~/.config/annotate/config.toml   |
 
-`claude_bin` exists for one reason beyond convenience: the end-to-end test
-points it at a fake executable whose name is NOT `claude`, so the test suite
-guard (which refuses any real `claude`) lets it run.
+`claude_bin` is what the terminal tab runs (resolved to an absolute path by
+the daemon, see terminal.py); the tests point it at names that are not
+`claude`, which the suite guard refuses.
 """
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_PORT = 8765
-DEFAULT_SEND_TIMEOUT = 1800
 
 
 class ConfigError(Exception):
@@ -37,7 +36,6 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class Config:
     port: int = DEFAULT_PORT
-    send_timeout: int = DEFAULT_SEND_TIMEOUT
     claude_bin: str = "claude"
 
 
@@ -53,6 +51,13 @@ def data_dir() -> Path:
     if env:
         return Path(env)
     return Path.home() / ".local" / "share" / "annotate"
+
+
+def annotate_command() -> str:
+    """Absolute path of the `annotate` entry point of the running interpreter's
+    environment (the project's virtualenv), else the bare name."""
+    entry = Path(sys.executable).parent / "annotate"
+    return str(entry) if entry.is_file() else "annotate"
 
 
 def _as_int(name: str, value: object, low: int, high: int) -> int:
@@ -78,15 +83,12 @@ def load_config() -> Config:
             raise ConfigError(f"cannot read {path}: {exc}") from exc
 
     port: object = raw.get("port", DEFAULT_PORT)
-    timeout: object = raw.get("send_timeout", DEFAULT_SEND_TIMEOUT)
     claude: object = raw.get("claude_bin", "claude")
 
     port = os.environ.get("ANNOTATE_PORT", port)
-    timeout = os.environ.get("ANNOTATE_SEND_TIMEOUT", timeout)
     claude = os.environ.get("ANNOTATE_CLAUDE", claude)
 
     if not isinstance(claude, str) or not claude.strip():
         raise ConfigError(f"claude_bin must be a non-empty string, got {claude!r}")
     return Config(port=_as_int("port", port, 1, 65535),
-                  send_timeout=_as_int("send_timeout", timeout, 10, 24 * 3600),
                   claude_bin=claude.strip())
