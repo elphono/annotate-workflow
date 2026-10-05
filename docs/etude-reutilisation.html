@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annoter sans tablette</title>
+<style>
+:root {
+  --bg: #fbfaf7; --paper: #ffffff; --ink: #1d232b; --muted: #5d6673; --line: #e3e0d8;
+  --session: #2563eb; --session-soft: #dbe7ff;
+  --annotate: #ea580c; --annotate-soft: #ffe6d5;
+  --browser: #15803d; --browser-soft: #d9f2e1;
+  --keep: #15803d; --adapt: #b45309; --drop: #9ca3af; --risk: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+    --session: #7aa7ff; --session-soft: #1f2e4d; --annotate: #fb923c; --annotate-soft: #4a2a15;
+    --browser: #4ade80; --browser-soft: #173826; --keep: #4ade80; --adapt: #fbbf24;
+    --drop: #6b7280; --risk: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+  --session: #7aa7ff; --session-soft: #1f2e4d; --annotate: #fb923c; --annotate-soft: #4a2a15;
+  --browser: #4ade80; --browser-soft: #173826; --keep: #4ade80; --adapt: #fbbf24;
+  --drop: #6b7280; --risk: #f87171;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 10px; padding-top: 10px; border-top: 2px solid var(--line); }
+h3 { font-size: 17px; margin: 22px 0 6px; }
+.lede { color: var(--muted); font-size: 17px; margin: 0 0 18px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; }
+nav.toc a { text-decoration: none; color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.verdict { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--annotate);
+  border-radius: 10px; padding: 12px 16px; margin: 14px 0; }
+figure { margin: 16px 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--paper); font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: .9em; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: #fff; white-space: nowrap; }
+.keep { background: var(--keep); } .adapt { background: var(--adapt); } .drop { background: var(--drop); }
+.ok { color: var(--keep); font-weight: 700; } .no { color: var(--risk); font-weight: 700; }
+details { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 10px 0; }
+summary { cursor: pointer; font-weight: 600; }
+.svg-ink { fill: var(--ink); } .svg-muted { fill: var(--muted); }
+.svg-line { stroke: var(--muted); }
+@media (max-width: 640px) {
+  h1 { font-size: 25px; } body { font-size: 15px; }
+  figure { overflow-x: auto; }
+  figure svg { min-width: 700px; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  td { border: none; padding: 2px 10px; }
+}
+</style>
+</head>
+<body>
+<main>
+<p class="lede">annotate-workflow · étude du 2026-10-05</p>
+<h1>Annoter sans tablette</h1>
+<p class="lede">Ce qu'on reprend du pont papier de remarkable-sync, le flux qui le remplace, et ce que
+serait la phase 2. Chaque section tient sur un écran ; le détail est replié.</p>
+<nav class="toc">
+  <a href="#reprise">a · Reprise module par module</a>
+  <a href="#flux">b · Le nouveau flux</a>
+  <a href="#phase2">c · Phase 2 et extension Chrome</a>
+  <a href="#mesures">d · Mesuré, pas mesuré</a>
+</nav>
+<div class="verdict"><strong>En une phrase :</strong> le navigateur remplace la tablette. Le démon
+sert le document avec une couche d'annotation, un Alt+clic épingle une note, un bouton la renvoie à la
+session qui a écrit le document. Rien à installer côté navigateur, aucune dépendance Python.</div>
+
+<h2 id="reprise">a · Ce qu'on reprend de remarkable-sync</h2>
+<figure>
+<svg viewBox="0 0 900 120" role="img" aria-labelledby="reuse-t">
+  <title id="reuse-t">Répartition des modules de remarkable-sync : repris, adaptés, abandonnés</title>
+  <rect x="0" y="34" width="90" height="40" rx="6" fill="var(--keep)"/>
+  <rect x="90" y="34" width="210" height="40" fill="var(--adapt)"/>
+  <rect x="300" y="34" width="600" height="40" rx="6" fill="var(--drop)"/>
+  <text x="8" y="22" class="svg-ink" font-size="15" font-weight="700">3 repris</text>
+  <text x="98" y="22" class="svg-ink" font-size="15" font-weight="700">7 adaptés</text>
+  <text x="308" y="22" class="svg-ink" font-size="15" font-weight="700">20 abandonnés ou remplacés : tout ce qui parlait à la tablette</text>
+  <text x="8" y="100" class="svg-muted" font-size="14">garde killpg, écriture atomique, gardes de test</text>
+  <text x="430" y="100" class="svg-muted" font-size="14">SSH, encre .rm, PDF, quota xochitl, geste ⊗…</text>
+</svg>
+<figcaption>Trente pièces examinées, regroupées en quinze lignes ci-dessous. Ce qui survit est ce qui protégeait la machine et les données ; ce qui
+tombe est ce qui servait l'appareil.</figcaption>
+</figure>
+<div class="scroll">
+<table>
+<thead><tr><th>Pièce de remarkable-sync</th><th>Sort</th><th>Où, et pourquoi</th></tr></thead>
+<tbody>
+<tr><td><code>rmcore/claude.py</code> — <code>SessionDisparue</code>, motif « No conversation found », <code>_tuer_le_groupe</code></td><td><span class="tag keep">repris</span></td><td><code>annotate/claude.py</code>. La garde sur les pid 0 et 1 a coûté la machine entière le 2026-08-23 ; elle passe telle quelle.</td></tr>
+<tr><td><code>rmpapier/etat.py</code> — <code>ecrire_atomiquement</code></td><td><span class="tag keep">repris</span></td><td><code>registry.atomic_write</code> : temporaire au pid, puis <code>os.replace</code>. Le reste d'<code>etat.py</code> (verdicts mort / bloqué) tombe : le démon répond en HTTP ou ne répond pas.</td></tr>
+<tr><td><code>tests/conftest.py</code> — aucun vrai <code>claude</code>, <code>ssh</code>, signal</td><td><span class="tag keep">repris</span></td><td>Étendu à <code>cmd.exe</code>, <code>powershell.exe</code>, <code>wsl.exe</code>, <code>systemctl</code> ; un signal n'atteint que les processus lancés par le test.</td></tr>
+<tr><td><code>rmpapier/cli.py</code> — <code>service</code></td><td><span class="tag adapt">adapté</span></td><td>Unité générée depuis l'environnement, Python lancé directement (jamais <code>uv run</code> : double SIGTERM mesuré le 2026-09-15). Elle est maintenant écrite, puis activée à la demande.</td></tr>
+<tr><td><code>rmpapier/plateau.py</code> + <code>plateau.ps1</code> (3 615 lignes)</td><td><span class="tag adapt">adapté</span></td><td><code>tray.py</code> + <code>tray.ps1</code> (≈ 310 lignes), qui ne parle qu'en HTTP. Leçons gardées : ASCII pur, pas de <code>ValidateSet</code>, <code>-d</code> sans guillemets, NUL de <code>wsl.exe</code>, cache des HICON, DPI.</td></tr>
+<tr><td><code>rmpapier/session.py</code> — reprendre, sinon rejouer une fois</td><td><span class="tag adapt">adapté</span></td><td><code>sender.py</code> : <code>--resume</code>, repli sur une session neuve avec « lis-le d'abord ». En arrière-plan : le démon ne bloque jamais.</td></tr>
+<tr><td>Ticket #14 — hook <code>Stop</code> + marqueur <code>&lt;!-- tablette --&gt;</code></td><td><span class="tag adapt">adapté</span></td><td>Hook <code>PostToolUse</code> : tout <code>.html</code> écrit sous un <code>docs/</code> du workspace est enregistré avec la session qui l'écrit. <code>RMSYNC_TOUR</code> devient <code>ANNOTATE_SESSION</code>.</td></tr>
+<tr><td><code>rmpapier/oubli.py</code> — <code>forget [--delete]</code></td><td><span class="tag adapt">adapté</span></td><td>Même geste, côté registre ; refusé pendant qu'une session tourne sur le document.</td></tr>
+<tr><td><code>test_aucune_valeur_de_deploiement_n_est_en_dur</code></td><td><span class="tag adapt">adapté</span></td><td>Même balayage AST, étendu au port et au nom de distribution, avec un témoin qui doit déclencher.</td></tr>
+<tr><td><code>tools/mutate.py</code></td><td><span class="tag adapt">adapté</span></td><td>Réduit à six mutations dirigées, toujours sur une copie bornée.</td></tr>
+<tr><td><code>transport.py</code>, <code>lease.py</code>, quota <code>xochitl</code>, veille</td><td><span class="tag drop">abandonné</span></td><td>Plus d'appareil : plus de SSH, de bail, de redémarrage à rationner.</td></tr>
+<tr><td><code>annotations.py</code>, <code>renderer.py</code>, <code>fingerprint.py</code>, <code>composer.py</code></td><td><span class="tag drop">abandonné</span></td><td>L'encre <code>.rm</code> et le PDF 509 × 679 disparaissent : le document reste le HTML lui-même.</td></tr>
+<tr><td><code>ancrage.py</code>, manifeste, geste ⊗</td><td><span class="tag drop">remplacé</span></td><td>Ancrage = sélecteur CSS + citation + décalage (schéma ci-dessous). Le geste de clôture devient un bouton.</td></tr>
+<tr><td><code>file.py</code>, <code>envoi.py</code>, <code>montee.py</code>, <code>reveil.py</code></td><td><span class="tag drop">abandonné</span></td><td>Files durables et réveil servaient un appareil qui dort. Ici, une requête HTTP aboutit ou échoue tout de suite.</td></tr>
+<tr><td><code>explorateur.py</code>, <code>envoyer.ps1</code>, <code>session_publiee.py</code>, QR, <code>rmcarnet</code></td><td><span class="tag drop">abandonné</span></td><td>Le clic droit n'a plus d'objet (le hook enregistre) ; publier vers claude.ai servait le papier.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="flux">b · Le nouveau flux</h2>
+<figure>
+<svg viewBox="0 0 900 430" role="img" aria-labelledby="flow-t">
+  <title id="flow-t">La boucle : session, hook, registre, démon, navigateur, envoi, session</title>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+    </marker>
+  </defs>
+  <!-- lanes -->
+  <rect x="10" y="10" width="250" height="410" rx="12" fill="var(--session-soft)"/>
+  <rect x="290" y="10" width="330" height="410" rx="12" fill="var(--annotate-soft)"/>
+  <rect x="650" y="10" width="240" height="410" rx="12" fill="var(--browser-soft)"/>
+  <text x="24" y="36" font-size="15" font-weight="700" fill="var(--session)">Session Claude Code</text>
+  <text x="304" y="36" font-size="15" font-weight="700" fill="var(--annotate)">annotate (WSL)</text>
+  <text x="664" y="36" font-size="15" font-weight="700" fill="var(--browser)">Navigateur Windows</text>
+  <!-- nodes -->
+  <g font-size="14">
+    <rect x="30" y="60" width="210" height="58" rx="9" fill="var(--paper)" stroke="var(--session)" stroke-width="2"/>
+    <text x="44" y="84" class="svg-ink" font-weight="700">1 · écrit docs/x.html</text>
+    <text x="44" y="104" class="svg-muted">Write ou Edit</text>
+
+    <rect x="310" y="60" width="290" height="58" rx="9" fill="var(--paper)" stroke="var(--annotate)" stroke-width="2"/>
+    <text x="324" y="84" class="svg-ink" font-weight="700">2 · hook register-on-write</text>
+    <text x="324" y="104" class="svg-muted">annotate register --session &lt;id&gt;</text>
+
+    <rect x="310" y="150" width="290" height="58" rx="9" fill="var(--paper)" stroke="var(--annotate)" stroke-width="2"/>
+    <text x="324" y="174" class="svg-ink" font-weight="700">3 · registre</text>
+    <text x="324" y="194" class="svg-muted">~/.local/share/annotate</text>
+
+    <rect x="310" y="240" width="290" height="58" rx="9" fill="var(--paper)" stroke="var(--annotate)" stroke-width="2"/>
+    <text x="324" y="264" class="svg-ink" font-weight="700">4 · démon 127.0.0.1:8765</text>
+    <text x="324" y="284" class="svg-muted">HTML du disque + overlay</text>
+
+    <rect x="670" y="240" width="200" height="58" rx="9" fill="var(--paper)" stroke="var(--browser)" stroke-width="2"/>
+    <text x="684" y="264" class="svg-ink" font-weight="700">5 · Alt+clic</text>
+    <text x="684" y="284" class="svg-muted">épingle + note</text>
+
+    <rect x="670" y="340" width="200" height="58" rx="9" fill="var(--paper)" stroke="var(--browser)" stroke-width="2"/>
+    <text x="684" y="364" class="svg-ink" font-weight="700">6 · Send to session</text>
+    <text x="684" y="384" class="svg-muted">barre, pastille ou CLI</text>
+
+    <rect x="30" y="340" width="210" height="58" rx="9" fill="var(--paper)" stroke="var(--session)" stroke-width="2"/>
+    <text x="44" y="364" class="svg-ink" font-weight="700">7 · claude -p --resume</text>
+    <text x="44" y="384" class="svg-muted">corrige x.html sur place</text>
+  </g>
+  <!-- arrows -->
+  <g stroke="var(--muted)" stroke-width="2" fill="none" marker-end="url(#arr)">
+    <path d="M240,89 L306,89"/>
+    <path d="M455,118 L455,146"/>
+    <path d="M455,208 L455,236"/>
+    <path d="M600,269 L666,269"/>
+    <path d="M770,298 L770,336"/>
+    <path d="M670,369 L244,369"/>
+    <path d="M135,340 L135,122"/>
+  </g>
+  <text x="312" y="358" class="svg-muted" font-size="13">POST /send : le démon lance la session</text>
+  <text x="146" y="236" class="svg-muted" font-size="13">nouvelle</text>
+  <text x="146" y="252" class="svg-muted" font-size="13">version</text>
+</svg>
+<figcaption>Les étapes 2 et 7 sont automatiques ; l'utilisateur ne fait que 5 et 6. L'étape 7 tourne en
+arrière-plan : la page et la pastille montrent « session running » puis « answered ».</figcaption>
+</figure>
+<figure>
+<svg viewBox="0 0 900 190" role="img" aria-labelledby="anchor-t">
+  <title id="anchor-t">L'ancrage d'une épingle : sélecteur, citation, décalage</title>
+  <rect x="20" y="30" width="520" height="120" rx="8" fill="var(--paper)" stroke="var(--line)" stroke-width="2"/>
+  <text x="36" y="60" class="svg-ink" font-size="15" font-weight="700">h2 · Le nouveau flux</text>
+  <rect x="34" y="78" width="490" height="54" rx="4" fill="none" stroke="var(--annotate)" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="44" y="100" class="svg-ink" font-size="14">Les étapes 2 et 7 sont automatiques ; l'utilisateur…</text>
+  <circle cx="190" cy="116" r="12" fill="var(--annotate)"/>
+  <text x="185" y="121" fill="#fff" font-size="13" font-weight="700">1</text>
+  <path d="M34,132 L34,150 M34,146 L186,146 M186,150 L186,132" stroke="var(--muted)" stroke-width="1.5" fill="none"/>
+  <text x="70" y="168" class="svg-muted" font-size="13">offset_x, offset_y</text>
+  <g font-size="14">
+    <text x="570" y="62" class="svg-ink" font-weight="700">selector</text>
+    <text x="570" y="82" class="svg-muted" font-size="13">body &gt; main:nth-of-type(1) &gt; p:nth-of-type(4)</text>
+    <text x="570" y="110" class="svg-ink" font-weight="700">quote</text>
+    <text x="570" y="130" class="svg-muted">la sélection, ou les 120 premiers caractères</text>
+    <text x="570" y="158" class="svg-ink" font-weight="700">section (calculée au moment de l'envoi)</text>
+    <text x="570" y="178" class="svg-muted">le h1…h6 précédent : « Le nouveau flux »</text>
+  </g>
+</svg>
+<figcaption>Si le document change et que le sélecteur ne désigne plus rien, la note n'est pas perdue : elle
+passe dans la liste « orphelines » de la barre, et part avec sa citation et la mention « Anchor: lost ».</figcaption>
+</figure>
+<details><summary>Le contrat HTTP, et pourquoi aucune page web ne peut déclencher un envoi</summary>
+<p><code>GET /docs/&lt;id&gt;</code> relit le fichier à chaque requête et injecte <code>annotate.js</code> ;
+<code>GET /docs/&lt;id&gt;/files/…</code> sert les images relatives et refuse tout chemin qui sort du dossier
+du document (lien symbolique compris). <code>GET/PUT …/annotations</code>, <code>POST …/send</code>,
+<code>…/new-session</code>, <code>…/open</code>, <code>DELETE /api/docs/&lt;id&gt;</code>.</p>
+<p>N'importe quelle page ouverte dans le navigateur peut viser <code>localhost</code>. Comme <code>send</code>
+lance une session autorisée à éditer des fichiers, toute requête qui modifie exige l'en-tête
+<code>X-Annotate</code> (un en-tête personnalisé impose un pré-vol CORS que le démon n'accorde jamais) et
+refuse un <code>Origin</code> étranger ; le <code>Host</code> doit nommer localhost.</p>
+</details>
+
+<h2 id="phase2">c · Phase 2 : surligner, entourer, barrer — et l'extension Chrome</h2>
+<figure>
+<svg viewBox="0 0 900 250" role="img" aria-labelledby="p2-t">
+  <title id="p2-t">Trois gestes de phase 2 et leur mécanique</title>
+  <g font-size="14">
+    <rect x="10" y="10" width="280" height="230" rx="10" fill="var(--paper)" stroke="var(--line)"/>
+    <text x="26" y="38" class="svg-ink" font-weight="700">Surligner</text>
+    <rect x="26" y="58" width="150" height="22" fill="#fde047" opacity=".8"/>
+    <text x="30" y="74" fill="#1d232b">passage choisi</text><text x="180" y="74" class="svg-muted">et la suite</text>
+    <text x="26" y="112" class="svg-muted">sélection → Range</text>
+    <text x="26" y="134" class="svg-muted">rendu : CSS Custom Highlight API</text>
+    <text x="26" y="156" class="svg-muted">ancre : citation + préfixe/suffixe</text>
+    <text x="26" y="190" fill="var(--keep)" font-weight="700">ne touche pas au DOM</text>
+    <text x="26" y="210" class="svg-muted">donc ne décale aucun sélecteur</text>
+
+    <rect x="310" y="10" width="280" height="230" rx="10" fill="var(--paper)" stroke="var(--line)"/>
+    <text x="326" y="38" class="svg-ink" font-weight="700">Entourer</text>
+    <text x="352" y="76" class="svg-ink">un schéma, un mot</text>
+    <ellipse cx="415" cy="71" rx="82" ry="22" fill="none" stroke="var(--risk)" stroke-width="3"/>
+    <text x="326" y="112" class="svg-muted">tracé libre sur un &lt;canvas&gt;</text>
+    <text x="326" y="134" class="svg-muted">superposé, actif seulement</text>
+    <text x="326" y="156" class="svg-muted">quand l'outil est choisi</text>
+    <text x="326" y="190" fill="var(--adapt)" font-weight="700">ancre : élément sous le centre</text>
+    <text x="326" y="210" class="svg-muted">+ boîte du tracé en relatif</text>
+
+    <rect x="610" y="10" width="280" height="230" rx="10" fill="var(--paper)" stroke="var(--line)"/>
+    <text x="626" y="38" class="svg-ink" font-weight="700">Barrer</text>
+    <text x="630" y="74" class="svg-ink">phrase à supprimer</text>
+    <path d="M626,69 L770,69" stroke="var(--risk)" stroke-width="3"/>
+    <text x="626" y="112" class="svg-muted">un trait sur du texte =</text>
+    <text x="626" y="134" class="svg-muted">un Range (caretPositionFromPoint</text>
+    <text x="626" y="156" class="svg-muted">au début et à la fin)</text>
+    <text x="626" y="190" fill="var(--keep)" font-weight="700">même ancre que surligner</text>
+    <text x="626" y="210" class="svg-muted">avec le genre « strike »</text>
+  </g>
+</svg>
+<figcaption>L'outil se choisit dans la barre, comme dans l'outil Capture d'écran de Windows : pas de
+reconnaissance de geste. La reconnaissance du ⊗ a coûté plusieurs rondes sur la tablette ; un bouton ne se
+lit jamais de travers.</figcaption>
+</figure>
+<details><summary>Ce que la phase 2 ajoute au modèle et au prompt</summary>
+<p>Chaque annotation gagne un champ <code>kind</code> (<code>pin</code>, <code>highlight</code>,
+<code>circle</code>, <code>strike</code>). Pour les deux genres textuels, l'ancre devient une citation exacte
+plus un préfixe et un suffixe de 32 caractères (le principe du <code>TextQuoteSelector</code> de la norme
+Web Annotation) : elle survit à une réorganisation des blocs, là où un sélecteur <code>nth-of-type</code>
+casse. Pour <code>circle</code>, le tracé est stocké en coordonnées relatives à l'élément ancré, et le
+prompt dit « the user circled: “…” » avec le texte que la boîte du tracé recouvre.</p>
+<p>Le prompt envoyé ne change que d'un mot par note (« highlighted », « struck through », « circled ») :
+la session reçoit toujours section, citation, note.</p>
+</details>
+<div class="verdict"><strong>Arbitrage — pas d'extension Chrome en phase 1.</strong> L'overlay injecté par
+le démon couvre le besoin sans rien installer, dans n'importe quel navigateur, sans permission ni mode
+développeur. Une extension ne redevient utile que pour annoter des pages que le démon ne sert pas (un site
+externe, une PR GitHub) : c'est à ce moment-là, et seulement là, qu'il faudra la réévaluer — elle
+réutiliserait alors <code>annotate.js</code> et l'API du démon telles quelles.</div>
+
+<h2 id="mesures">d · Ce qui a été mesuré, et ce qui ne l'a pas été</h2>
+<div class="scroll">
+<table>
+<thead><tr><th></th><th>Affirmation</th><th>Mesure</th></tr></thead>
+<tbody>
+<tr><td class="ok">✓</td><td>Alt+clic → note enregistrée ; après rechargement l'épingle revient au point cliqué</td><td>Chromium 151 headless (Playwright) : écart ≤ 2 px exigé et tenu</td></tr>
+<tr><td class="ok">✓</td><td>Une note dont l'ancre a disparu reste listée et survit aux sauvegardes suivantes</td><td>même test ; la mutation qui la retire du modèle le fait tomber</td></tr>
+<tr><td class="ok">✓</td><td>Images relatives chargées, lien <code>#section</code> reste sur la page, barre lisible à 390 px</td><td>même test, captures regardées</td></tr>
+<tr><td class="ok">✓</td><td>Envoi : seules les notes jamais envoyées partent ; repli sur session neuve si la session a disparu</td><td>faux <code>claude</code> exécutable, lancé par le vrai <code>Popen</code> ; six mutations dirigées, six tuées</td></tr>
+<tr><td class="ok">✓</td><td>La Custom Highlight API surligne sans découper le nœud texte</td><td>Chromium 151 : <code>CSS.highlights.size = 1</code>, nœud texte unique après coup</td></tr>
+<tr><td class="ok">✓</td><td>Navigateur par défaut de cette machine</td><td>Chrome 154 (<code>ChromeHTML</code>) ; Edge 154 présent</td></tr>
+<tr><td class="no">✗</td><td>Alt+clic dans le Chrome Windows réel</td><td>non mesuré : testé sous Linux headless. Sous Windows, Alt seul peut donner le focus au menu du navigateur.</td></tr>
+<tr><td class="no">✗</td><td>L'icône de la pastille, son menu, ses couleurs</td><td>non regardés : pas d'écran. Syntaxe et mode <code>-Once</code> vérifiés.</td></tr>
+<tr><td class="no">✗</td><td>Le hook dans une vraie session Claude Code</td><td>éprouvé avec un JSON fabriqué ; les hooks se chargent au démarrage d'une session.</td></tr>
+<tr><td class="no">✗</td><td>Reprendre une session encore ouverte dans un terminal</td><td>non mesuré : deux écrivains sur la même conversation.</td></tr>
+</tbody>
+</table>
+</div>
+<details><summary>Ce qui n'est pas évident, et qu'il faut savoir avant de modifier</summary>
+<ul>
+<li>Le serveur fait autorité sur <code>sent_at</code> : une copie périmée dans un onglet ne peut pas faire renvoyer une note.</li>
+<li>Un envoi qui échoue est défait, pas rejoué : ses notes redeviennent envoyables, et c'est l'utilisateur qui reclique.</li>
+<li>Les épingles sont mises à jour en place : les recréer rendait le test navigateur rouge deux fois sur huit.</li>
+<li>Les sessions lancées par annotate portent <code>ANNOTATE_SESSION=1</code> : le hook les ignore, sinon la session qui répond ré-enregistrerait le document qu'elle corrige.</li>
+</ul>
+</details>
+</main>
+</body>
+</html>
