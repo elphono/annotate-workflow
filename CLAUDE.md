@@ -28,6 +28,24 @@ une session attend ? ── oui ─► `annotate wait` rend les notes et sort : 
                   notes (session neuve si elle a disparu de cette machine)
 ```
 
+**Deux voies d'entrée au registre, et il les faut toutes les deux** :
+
+| Voie | Ce qu'elle voit | Ce qu'elle apporte |
+|---|---|---|
+| le hook (push) | les `Write` et `Edit` d'une session | la session à coup sûr, et la consigne `annotate wait` |
+| le parcours du démon (toutes les 30 s) | tout `.html` écrit sous un `docs/` **depuis son premier passage** | ce que Bash écrit (`cp` depuis un scratchpad, scripts, sous-agents) ; la session est retrouvée dans les transcripts |
+
+Mesuré le 2026-10-05 : `<repo>/docs/<name>.html`, composé par un
+sous-agent dans son scratchpad puis copié par `cp`, n'est jamais passé par le hook. **Rien
+d'antérieur au premier passage n'est repris** (décision du 2026-10-05) : `scan.json` garde le
+début du dernier passage, si bien qu'un fichier écrit démon arrêté est trouvé au démarrage
+suivant, et qu'un document oublié ne revient que s'il est réécrit. `figures/` est exclu des deux
+voies : ce sont les sources HTML des images d'un document.
+
+**La pastille et la page d'accueil classent les documents par session** : le titre de la
+session (son `/rename`, sinon celui que Claude Code a généré, lus dans le transcript, de façon
+incrémentale) et son dossier ; les documents sans session connue viennent en dernier.
+
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
 `docs/etude-reutilisation.html`.
 
@@ -82,6 +100,9 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | le prompt arrive à `claude` en UN argument, quoi qu'il contienne ; aucun `;` sur la ligne de `wt.exe` | `test_the_prompt_reaches_claude_as_one_argument_in_the_right_folder`, `test_the_tab_command_never_carries_a_semicolon` |
 | `send` n'envoie que les annotations jamais envoyées ; le serveur fait autorité sur `sent_at` | `test_an_open_session_receives_only_the_unsent_notes`, `test_a_stale_browser_copy_cannot_unsend_a_note` |
 | une annotation dont l'ancre ne résout plus n'est jamais perdue (barre « orphelines », prompt « Anchor: lost ») | `test_a_lost_anchor_is_still_sent_with_its_quote`, `test_browser.py` |
+| le parcours ne reprend rien d'antérieur à son premier passage, et ne perd rien démon arrêté | `test_nothing_older_than_the_first_pass_is_taken`, `test_the_daemon_being_down_loses_nothing` |
+| l'auteur d'un document est le DERNIER appel d'outil qui le nomme avant son écriture, sous-agent compris | `test_the_writer_is_the_last_call_naming_the_file_before_it_was_written` |
+| le hook et le parcours s'accordent sur ce qu'est un document | `test_the_hook_and_the_scan_agree_on_what_a_document_is` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 

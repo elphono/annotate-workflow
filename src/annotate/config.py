@@ -12,6 +12,7 @@ Precedence, highest first: environment variable, config file, default.
 | port           | ANNOTATE_PORT            | 8765                             |
 | claude_bin     | ANNOTATE_CLAUDE          | "claude" (resolved on the PATH)  |
 | data_dir       | ANNOTATE_DATA_DIR        | ~/.local/share/annotate          |
+| workspace      | ANNOTATE_WORKSPACE       | ~/workspace (the hook reads it too) |
 | (config file)  | ANNOTATE_CONFIG          | ~/.config/annotate/config.toml   |
 
 `claude_bin` is what the terminal tab runs (resolved to an absolute path by
@@ -51,6 +52,15 @@ def data_dir() -> Path:
     if env:
         return Path(env)
     return Path.home() / ".local" / "share" / "annotate"
+
+
+def workspace() -> Path:
+    """Where the documents live: the hook and the daemon's scan watch the
+    `docs/` folders under it."""
+    env = os.environ.get("ANNOTATE_WORKSPACE")
+    if env:
+        return Path(env)
+    return Path.home() / "workspace"
 
 
 def annotate_command() -> str:

@@ -246,3 +246,15 @@ def test_urls_given_to_windows_use_the_ipv4_loopback(daemon):
     # Measured 2026-10-05 with networkingMode=mirrored: from Windows,
     # 127.0.0.1:8765 answers in 22 ms, localhost:8765 times out (tried as ::1).
     assert daemon.srv.base_url() == f"http://127.0.0.1:{daemon.port}"
+
+
+def test_the_listing_groups_documents_by_session(daemon, make_doc):
+    a = registry.register(make_doc("<p>a</p>", name="a.html"), session="s-one")["id"]
+    b = registry.register(make_doc("<p>b</p>", name="b.html"), session="")["id"]
+    listing = daemon.request("GET", "/api/docs")[1]
+    assert [g["session_id"] for g in listing["sessions"]] == ["s-one", ""]
+    assert listing["sessions"][0]["docs"] == [a] and listing["sessions"][1]["docs"] == [b]
+    status, page = daemon.request("GET", "/", raw=True)
+    text = page.decode()
+    assert text.index("session s-one") < text.index("a.html") < \
+        text.index("documents without a known session") < text.index("b.html")

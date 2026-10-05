@@ -119,3 +119,26 @@ def test_unknown_or_malformed_ids_are_refused():
         registry.get("deadbeef")
     with pytest.raises(registry.UnknownDocument):
         registry.annotations_path("../etc")
+
+
+def test_documents_are_grouped_by_session_newest_group_first(make_doc, tmp_path):
+    root = tmp_path
+    a = registry.register(make_doc("<p>a</p>", name="a.html"), session="s-old",
+                          cwd=root / "repo")
+    b = registry.register(make_doc("<p>b</p>", name="b.html"), session="")
+    c = registry.register(make_doc("<p>c</p>", name="c.html"), session="s-new",
+                          cwd=root / "repo")
+    d = registry.register(make_doc("<p>d</p>", name="d.html"), session="s-old",
+                          cwd=root / "repo")
+    # Distinct dates: registered in the same second, they would tie, and the
+    # order would prove nothing.
+    for rank, entry in enumerate((a, b, c, d)):
+        registry.update(entry["id"], registered_at=f"2026-10-05T10:0{rank}:00+00:00")
+    titles = {"s-new": "Timeline du déploiement"}
+    groups = registry.group_by_session(registry.summary(), lambda s: titles.get(s, ""), root)
+    assert [g["session_id"] for g in groups] == ["s-old", "s-new", ""]
+    assert groups[0]["docs"] == [d["id"], a["id"]]
+    assert groups[1]["label"] == "Timeline du déploiement · repo"
+    assert groups[0]["label"] == "session s-old · repo"         # no title known
+    assert groups[2]["label"] == "documents without a known session"
+    assert groups[2]["docs"] == [b["id"]] and c["id"] in groups[1]["docs"]

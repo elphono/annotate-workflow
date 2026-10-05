@@ -43,7 +43,7 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import browser, htmldoc, listeners, registry, sender
+from . import browser, claude, config, htmldoc, listeners, registry, scanner, sender
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -267,7 +267,9 @@ class Handler(BaseHTTPRequestHandler):
             if method != "GET":
                 raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
             docs = [self._with_live(d) for d in registry.summary()]
-            return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs})
+            groups = registry.group_by_session(docs, claude.title, config.workspace())
+            return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs,
+                                              "sessions": groups})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
         if len(rest) > 2:
             raise Refused(HTTPStatus.NOT_FOUND, "not found")
@@ -306,15 +308,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def _index(self) -> None:
         rows = []
-        for doc in registry.summary():
-            title = htmldoc.html.escape(doc.get("title") or doc["path"])
-            rows.append(
-                f'<tr><td><a href="/docs/{doc["id"]}">{title}</a></td>'
-                f'<td>{doc["status"]}</td><td>{doc["pending"]}/{doc["annotations"]}</td>'
-                f'<td><code>{htmldoc.html.escape(doc["path"])}</code></td></tr>')
+        docs = {d["id"]: d for d in registry.summary()}
+        for group in registry.group_by_session(list(docs.values()), claude.title,
+                                               config.workspace()):
+            rows.append(f'<tr><th colspan="4" class="session">'
+                        f'{htmldoc.html.escape(group["label"])}</th></tr>')
+            for doc_id in group["docs"]:
+                doc = docs[doc_id]
+                title = htmldoc.html.escape(doc.get("title") or doc["path"])
+                rows.append(
+                    f'<tr><td><a href="/docs/{doc["id"]}">{title}</a></td>'
+                    f'<td>{doc["status"]}</td><td>{doc["pending"]}/{doc["annotations"]}</td>'
+                    f'<td><code>{htmldoc.html.escape(doc["path"])}</code></td></tr>')
         page = ("<!doctype html><meta charset='utf-8'><title>annotate</title>"
                 "<style>body{font:15px system-ui;margin:2em}td{padding:4px 10px}"
-                "code{font-size:12px;color:#555}</style><h1>annotate</h1>"
+                "code{font-size:12px;color:#555}th.session{text-align:left;"
+                "padding:18px 10px 4px;border-bottom:1px solid #ccc}</style>"
+                "<h1>annotate</h1>"
                 "<table><tr><th>Document</th><th>Status</th><th>To send / all</th>"
                 "<th>Path</th></tr>" + "".join(rows) + "</table>")
         self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
@@ -352,6 +362,9 @@ def serve(cfg: Config) -> int:
     signal.signal(signal.SIGINT, on_signal)
     worker = threading.Thread(target=srv.serve_forever, name="http", daemon=True)
     worker.start()
+    scan_stop = threading.Event()
+    threading.Thread(target=scanner.run, args=(config.workspace(), scan_stop),
+                     name="scan", daemon=True).start()
     log.info("annotate daemon listening on %s", srv.base_url())
     while not _Stop.requested:
         time.sleep(0.2)
@@ -359,6 +372,7 @@ def serve(cfg: Config) -> int:
     # finalises (default action restored by CPython at shutdown).
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
+    scan_stop.set()
     srv.shutdown()
     srv.server_close()
     log.info("annotate daemon stopped")

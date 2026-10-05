@@ -63,14 +63,39 @@ function Invoke-Api {
 }
 
 function Get-Docs {
-    <# Always returns @{ Ok; Docs (array, maybe empty); Error }. #>
+    <# Always returns @{ Ok; Docs (array, maybe empty); Sessions (array); Error }. #>
     $r = Invoke-Api -Method 'GET' -Path '/api/docs'
-    if (-not $r.Ok) { return @{ Ok = $false; Docs = @(); Error = $r.Error } }
+    if (-not $r.Ok) { return @{ Ok = $false; Docs = @(); Sessions = @(); Error = $r.Error } }
     $docs = @()
     if ($r.Data.PSObject.Properties.Name -contains 'docs' -and $r.Data.docs) {
         $docs = @($r.Data.docs)
     }
-    return @{ Ok = $true; Docs = $docs; Error = '' }
+    $sessions = @()
+    if ($r.Data.PSObject.Properties.Name -contains 'sessions' -and $r.Data.sessions) {
+        $sessions = @($r.Data.sessions)
+    }
+    return @{ Ok = $true; Docs = $docs; Sessions = $sessions; Error = '' }
+}
+
+function Get-Groups {
+    <# The documents grouped by the session that produced them, in the order
+       the daemon gives (most recent session first). Each group is
+       @{ Label; Docs }. A daemon too old to send `sessions` gives one group. #>
+    param($State)
+    $byId = @{}
+    foreach ($d in @($State.Docs)) { $byId[[string]$d.id] = $d }
+    $groups = @()
+    foreach ($s in @($State.Sessions)) {
+        $docs = @(@($s.docs) | Where-Object { $byId.ContainsKey([string]$_) } |
+                ForEach-Object { $byId[[string]$_] })
+        $label = [string]$s.label
+        if ($label.Length -gt 70) { $label = $label.Substring(0, 67) + '...' }
+        $groups += , @{ Label = $label; Docs = $docs }
+    }
+    if ($groups.Count -eq 0 -and @($State.Docs).Count -gt 0) {
+        $groups += , @{ Label = 'documents'; Docs = @($State.Docs) }
+    }
+    return , $groups
 }
 
 function Get-Summary {
@@ -105,8 +130,11 @@ if ($Once) {
     }
     Write-Output ("daemon at $BaseUrl, " + @($state.Docs).Count + ' document(s); icon: ' +
         (Get-Summary $state).Kind)
-    foreach ($doc in $state.Docs) {
-        Write-Output ("  " + $doc.id + "  " + (Format-DocLine $doc))
+    foreach ($group in @(Get-Groups $state)) {
+        Write-Output ("  " + $group.Label)
+        foreach ($doc in @($group.Docs)) {
+            Write-Output ("    " + $doc.id + "  " + (Format-DocLine $doc))
+        }
     }
     exit 0
 }
@@ -274,16 +302,26 @@ function Build-Menu {
     elseif (@($state.Docs).Count -eq 0) {
         [void](Add-Item $menu 'No document registered' $null)
     }
-    foreach ($doc in $state.Docs) {
-        $title = [string]$doc.title
-        $entry = New-Object System.Windows.Forms.ToolStripMenuItem (Format-DocLine $doc)
-        Add-DocItem $entry 'Open' $doc.id 'open' $title
-        Add-DocItem $entry 'Send to session' $doc.id 'send' $title
-        Add-DocItem $entry 'New session' $doc.id 'new-session' $title
-        [void]$entry.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
-        Add-DocItem $entry 'Unmanage' $doc.id 'forget' $title
-        Add-DocItem $entry 'Delete file...' $doc.id 'delete' $title
-        [void]$menu.Items.Add($entry)
+    $first = $true
+    foreach ($group in @(Get-Groups $state)) {
+        if (-not $first) { [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator)) }
+        $first = $false
+        # A label, not a disabled item: a header reads as a title, not as a
+        # greyed action that refuses to work.
+        $header = New-Object System.Windows.Forms.ToolStripLabel $group.Label
+        $header.Font = New-Object System.Drawing.Font($menu.Font, [System.Drawing.FontStyle]::Bold)
+        [void]$menu.Items.Add($header)
+        foreach ($doc in @($group.Docs)) {
+            $title = [string]$doc.title
+            $entry = New-Object System.Windows.Forms.ToolStripMenuItem ('   ' + (Format-DocLine $doc))
+            Add-DocItem $entry 'Open' $doc.id 'open' $title
+            Add-DocItem $entry 'Send to session' $doc.id 'send' $title
+            Add-DocItem $entry 'New session' $doc.id 'new-session' $title
+            [void]$entry.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+            Add-DocItem $entry 'Unmanage' $doc.id 'forget' $title
+            Add-DocItem $entry 'Delete file...' $doc.id 'delete' $title
+            [void]$menu.Items.Add($entry)
+        }
     }
     [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
     $daemon = New-Object System.Windows.Forms.ToolStripMenuItem 'Daemon'

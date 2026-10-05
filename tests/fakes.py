@@ -93,3 +93,16 @@ def transcript(projects: Path, session: str, *, folder: str = "-home-x-repo",
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def compact(entry: dict) -> str:
+    """A transcript line as Claude Code writes it: no space after `:` or `,`."""
+    return json.dumps(entry, separators=(",", ":"), ensure_ascii=False)
+
+
+def tool_call(session: str, when: str, command: str, cwd: str = "/repo") -> str:
+    """An assistant line carrying one Bash tool call, at ISO time `when`."""
+    return compact({"type": "assistant", "sessionId": session, "cwd": cwd,
+                    "timestamp": when,
+                    "message": {"content": [{"type": "tool_use", "name": "Bash",
+                                             "input": {"command": command}}]}})

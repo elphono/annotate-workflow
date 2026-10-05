@@ -326,6 +326,36 @@ def unmark_sent(doc_id: str, stamp: str) -> int:
         return count
 
 
+def group_by_session(docs: list[dict[str, Any]], title_of: Any,
+                     root: Path) -> list[dict[str, Any]]:
+    """The documents of `summary()` grouped by the session that produced them,
+    most recent group first (decision of 2026-10-05: "classer les documents par
+    session"). Documents without a known session form one last group.
+
+    `label` is what the user reads: the session's title (`title_of(id)`, its
+    /rename title or the one Claude Code generated), then the folder it works
+    in, relative to the workspace."""
+    groups: dict[str, dict[str, Any]] = {}
+    for doc in docs:                       # already newest first
+        key = doc.get("session_id") or ""
+        group = groups.get(key)
+        if group is None:
+            cwd = Path(doc.get("cwd") or "")
+            try:
+                folder = str(cwd.relative_to(root)) if cwd.is_absolute() else ""
+            except ValueError:
+                folder = cwd.name
+            name = (title_of(key) if key else "") or (
+                f"session {key[:8]}" if key else "documents without a known session")
+            group = groups[key] = {
+                "session_id": key, "title": name, "folder": folder if key else "",
+                "label": f"{name} · {folder}" if key and folder else name,
+                "docs": []}
+        group["docs"].append(doc["id"])
+    known = [g for k, g in groups.items() if k]
+    return known + ([groups[""]] if "" in groups else [])
+
+
 def summary() -> list[dict[str, Any]]:
     """The registry as `/api/docs` serves it, with annotation counts."""
     with locked():

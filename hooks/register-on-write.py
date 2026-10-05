@@ -45,15 +45,23 @@ def annotate_command() -> list[str] | None:
     return [str(local)] if local.is_file() else None
 
 
+# The same folders the daemon's scan skips (src/annotate/scanner.py), `figures/`
+# above all: the HTML sources of a document's images are not documents.
+SKIPPED = frozenset({".git", "node_modules", ".venv", "__pycache__", ".mypy_cache",
+                     ".pytest_cache", ".ruff_cache", "figures"})
+
+
 def wanted(path: Path, root: Path) -> bool:
-    """An .html file with a `docs` folder between the workspace and itself."""
+    """An .html file with a `docs` folder between the workspace and itself,
+    and no skipped folder on the way."""
     if path.suffix.lower() != ".html":
         return False
     try:
         relative = path.resolve().relative_to(root.resolve())
     except (ValueError, OSError):
         return False
-    return "docs" in relative.parts[:-1]
+    parts = relative.parts[:-1]
+    return "docs" in parts and not SKIPPED.intersection(parts)
 
 
 def main() -> int:
