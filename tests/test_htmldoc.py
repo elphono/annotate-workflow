@@ -90,3 +90,12 @@ def test_inject_overlay_respects_an_existing_base_and_a_missing_body():
     # <header> must not be mistaken for <head>.
     tricky = htmldoc.inject_overlay("<html><body><header>h</header></body></html>", "d1")
     assert tricky.index("<base") < tricky.index("<body>")
+
+
+def test_svg_titles_are_not_the_document_title():
+    page = ("<html><head><title>Real title</title></head><body>"
+            "<svg><title>Figure one</title></svg><svg><title>Figure two</title></svg>"
+            "</body></html>")
+    assert htmldoc.title_of(page, "x.html") == "Real title"
+    only_svg = "<body><svg><title>Figure</title></svg></body>"
+    assert htmldoc.title_of(only_svg, "x.html") == "x.html"

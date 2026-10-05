@@ -89,3 +89,9 @@ def test_tray_refuses_without_a_distribution(monkeypatch):
     monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
     with pytest.raises(tray.TrayError):
         tray.environment_arguments(8765)
+
+
+def test_the_tray_calls_the_ipv4_loopback():
+    script = TRAY_PS1.read_text()
+    assert '$BaseUrl = "http://127.0.0.1:$Port"' in script
+    assert "http://localhost" not in script

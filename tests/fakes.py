@@ -56,7 +56,7 @@ if {gone!r} and "--resume" in argv:
     sys.stderr.write("No conversation found with session ID: " + argv[-1] + "\\n")
     sys.exit(1)
 print(json.dumps({{"type": "result", "is_error": False, "result": "done",
-                  "session_id": "fake-session-42"}}))
+                  "session_id": "fake-session-42", "total_cost_usd": 0.0123}}))
 '''
 
 

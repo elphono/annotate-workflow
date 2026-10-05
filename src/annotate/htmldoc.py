@@ -66,6 +66,7 @@ class _TreeBuilder(HTMLParser):
         self.count = 0
         self.title_parts: list[str] = []
         self.in_title = False
+        self.title_seen = False
 
     # -- helpers ---------------------------------------------------------
     def _open(self, tag: str, attrs: dict[str, str]) -> Node:
@@ -101,8 +102,12 @@ class _TreeBuilder(HTMLParser):
             self._close_in_scope(frozenset({"td", "th"}),
                                  frozenset({"tr", "table"}))
         node = self._open(tag, values)
-        if tag == "title":
+        # Only the document's own <title>: an inline SVG carries <title>
+        # elements too (its accessible name), and they are not the title.
+        if tag == "title" and not self.title_seen and \
+                not any(n.tag == "svg" for n in self.stack):
             self.in_title = True
+            self.title_seen = True
         if tag not in VOID:
             self.stack.append(node)
 

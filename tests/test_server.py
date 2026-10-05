@@ -153,7 +153,7 @@ def test_open_uses_the_browser_module(daemon, make_doc, monkeypatch):
     opened = []
     monkeypatch.setattr(browser, "open_url", lambda url: opened.append(url) or "fake")
     status, body = daemon.request("POST", f"/api/docs/{doc_id}/open")
-    assert status == 200 and opened == [f"http://localhost:{daemon.port}/docs/{doc_id}"]
+    assert status == 200 and opened == [f"http://127.0.0.1:{daemon.port}/docs/{doc_id}"]
 
 
 def test_static_files_and_index(daemon, make_doc):
@@ -170,3 +170,9 @@ def test_a_missing_file_is_gone_not_a_crash(daemon, make_doc):
     doc_id = registry.register(path)["id"]
     Path(path).unlink()
     assert daemon.request("GET", f"/docs/{doc_id}")[0] == 410
+
+
+def test_urls_given_to_windows_use_the_ipv4_loopback(daemon):
+    # Measured 2026-10-05 with networkingMode=mirrored: from Windows,
+    # 127.0.0.1:8765 answers in 22 ms, localhost:8765 times out (tried as ::1).
+    assert daemon.srv.base_url() == f"http://127.0.0.1:{daemon.port}"

@@ -30,7 +30,7 @@ def test_register_list_forget(make_doc, capsys, monkeypatch):
     assert cli.main(["register", str(path), "--session", "s1"]) == 0
     out = capsys.readouterr().out
     doc_id = out.split()[0]
-    assert f"http://localhost:8765/docs/{doc_id}" in out
+    assert f"http://127.0.0.1:8765/docs/{doc_id}" in out
     assert cli.main(["list"]) == 0
     line = capsys.readouterr().out
     assert doc_id in line and "new" in line and str(path) in line

@@ -26,7 +26,8 @@ log = logging.getLogger("annotate")
 
 
 def _url(cfg: config.Config, doc_id: str) -> str:
-    return f"http://localhost:{cfg.port}/docs/{doc_id}"
+    # 127.0.0.1, not localhost: see server.AnnotateServer.base_url.
+    return f"http://127.0.0.1:{cfg.port}/docs/{doc_id}"
 
 
 def cmd_register(args: argparse.Namespace, cfg: config.Config) -> int:

@@ -106,19 +106,21 @@ class Sender:
              items: list[dict[str, Any]], stamp: str, fresh: bool) -> None:
         try:
             try:
-                session = self._launch(entry, items,
-                                       None if fresh else entry["session_id"], fresh)
+                session, cost = self._launch(entry, items,
+                                             None if fresh else entry["session_id"], fresh)
             except claude.SessionGone:
                 log.warning("session %s of %s is gone on this machine: opening a "
                             "new session with the same notes",
                             entry.get("session_id"), doc_id)
-                session = self._launch(entry, items, None, True)
+                session, cost = self._launch(entry, items, None, True)
             still = registry.pending(registry.list_annotations(doc_id))
             registry.update(doc_id,
                             status="annotated" if still else "answered",
                             session_id=session or entry.get("session_id", ""),
-                            answered_at=registry.now_iso(), last_error="")
-            log.info("%s answered by session %s", doc_id, session)
+                            answered_at=registry.now_iso(), last_error="",
+                            last_cost_usd=cost)
+            log.info("%s answered by session %s (cost reported: %s USD)",
+                     doc_id, session, "unknown" if cost is None else f"{cost:.4f}")
         except Exception as exc:  # the thread must always settle the status
             log.error("send of %s failed: %s", doc_id, exc)
             try:
@@ -132,7 +134,8 @@ class Sender:
                 self._running.pop(doc_id, None)
 
     def _launch(self, entry: dict[str, Any], items: list[dict[str, Any]],
-                resume: str | None, fresh: bool) -> str:
+                resume: str | None, fresh: bool) -> tuple[str, float | None]:
+        """Run one session; return (session id, cost in USD as claude reports it)."""
         text = prompt.build(entry, items, fresh=fresh)
         command = claude.argv(self._cfg.claude_bin, resume)
         try:
@@ -175,7 +178,10 @@ class Sender:
         if data.get("is_error"):
             raise claude.LaunchError(f"claude reported an error: "
                                      f"{str(data.get('result', ''))[:400]}")
-        return str(data.get("session_id", ""))
+        cost = data.get("total_cost_usd")
+        return (str(data.get("session_id", "")),
+                float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool)
+                else None)
 
 
 def recover_stale() -> list[str]:

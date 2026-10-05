@@ -87,7 +87,12 @@ class AnnotateServer(ThreadingHTTPServer):
         return int(self.server_address[1])
 
     def base_url(self) -> str:
-        return f"http://localhost:{self.port}"
+        """The URL handed to Windows. IPv4 loopback, never `localhost`:
+        with WSL `networkingMode=mirrored`, Windows resolves `localhost` to
+        ::1 first, which a socket bound to 127.0.0.1 in WSL never receives
+        (measured 2026-10-05: 127.0.0.1 answers in 22 ms, localhost times
+        out)."""
+        return f"http://127.0.0.1:{self.port}"
 
 
 class Handler(BaseHTTPRequestHandler):

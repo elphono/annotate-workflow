@@ -87,6 +87,9 @@ copie du dépôt et exige que la suite tombe.
 - **Le serveur injecte un `<base href="/docs/<id>/files/">`** pour que les images relatives se
   chargent. Effet de bord : un lien `href="#section"` quitterait la page ; l'overlay intercepte
   les liens de fragment et pose `location.hash` lui-même.
+- **Les URL données à Windows sont en `127.0.0.1`, jamais `localhost`** : avec
+  `networkingMode=mirrored`, Windows essaie `localhost` en `::1` d'abord, et une socket liée à
+  `127.0.0.1` dans WSL ne le reçoit pas. Mesuré le 2026-10-05 : 22 ms contre un délai expiré.
 - **Toute requête qui modifie exige l'en-tête `X-Annotate`** et refuse un `Origin` étranger :
   une page web quelconque peut viser `localhost`, et `send` lance une session autorisée à
   éditer des fichiers. Le `Host` doit nommer localhost (rebinding DNS).

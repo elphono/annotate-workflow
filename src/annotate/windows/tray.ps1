@@ -6,7 +6,7 @@
     one context menu built from the daemon's /api/docs when it opens, and
     start/stop/restart of the systemd unit through wsl.exe.
 
-    IT TALKS TO THE DAEMON OVER HTTP ONLY (WSL2 relays localhost). The single
+    IT TALKS TO THE DAEMON OVER HTTP ONLY (WSL2 relays the loopback). The single
     exception is the daemon control, which has to reach systemd inside WSL.
 
     NO PATH, NO DISTRIBUTION, NO PORT IS WRITTEN HERE: they arrive as
@@ -33,10 +33,13 @@ $ErrorActionPreference = 'Stop'
 # Windows PowerShell writes stdout in the OEM code page; document titles are
 # accented. Measured in remarkable-sync: without this, -Once was undecodable.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-# Only localhost is ever called: no system proxy may intercept it.
+# Only the loopback is ever called: no system proxy may intercept it.
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy
 
-$BaseUrl = "http://localhost:$Port"
+# 127.0.0.1, NEVER localhost: with WSL networkingMode=mirrored, Windows
+# tries localhost as ::1 first, which never reaches a socket bound to
+# 127.0.0.1 in WSL (measured 2026-10-05: 22 ms against a 6 s timeout).
+$BaseUrl = "http://127.0.0.1:$Port"
 $ApiHeaders = @{ 'X-Annotate' = 'tray' }
 $RefreshMs = 10000
 

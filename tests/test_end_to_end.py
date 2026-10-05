@@ -81,6 +81,7 @@ def test_a_note_reaches_the_producing_session(running, make_doc):
     assert call["marker"] == "1"
     entry = registry.get(doc_id)
     assert entry["session_id"] == "fake-session-42"
+    assert entry["last_cost_usd"] == 0.0123
     assert registry.list_annotations(doc_id)[0]["sent_at"] == entry["sent_at"]
     # A second send has nothing left: the note is not sent twice.
     assert _request(port, "POST", f"/api/docs/{doc_id}/send")[0] == 409
