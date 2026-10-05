@@ -409,10 +409,7 @@
     await saving;
     try {
       const result = await call('POST', '/' + action);
-      message = result.target === 'session'
-        ? result.count + ' note(s) delivered to the open session: it answers there.'
-        : result.count + ' note(s) opened in a terminal tab' +
-          (result.fresh ? ', in a new session.' : ': no open session listened, so its session was resumed there.');
+      message = result.message;
       const data = await call('GET', '/annotations');
       annotations = data.annotations;
       await refreshEntry();

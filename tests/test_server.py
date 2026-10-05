@@ -232,7 +232,9 @@ def test_static_files_and_index(daemon, make_doc):
     assert status == 200 and b"data-annotate-doc" in js
     assert daemon.request("GET", "/static/../server.py", raw=True)[0] in (403, 404)
     status, page = daemon.request("GET", "/")
-    assert status == 200 and "Indexed" in page
+    assert status == 200 and '<script src="/static/index.js">' in page
+    status, js = daemon.request("GET", "/static/index.js", raw=True)
+    assert status == 200 and b"/api/docs" in js
 
 
 def test_a_missing_file_is_gone_not_a_crash(daemon, make_doc):
@@ -254,7 +256,35 @@ def test_the_listing_groups_documents_by_session(daemon, make_doc):
     listing = daemon.request("GET", "/api/docs")[1]
     assert [g["session_id"] for g in listing["sessions"]] == ["s-one", ""]
     assert listing["sessions"][0]["docs"] == [a] and listing["sessions"][1]["docs"] == [b]
-    status, page = daemon.request("GET", "/", raw=True)
-    text = page.decode()
-    assert text.index("session s-one") < text.index("a.html") < \
-        text.index("documents without a known session") < text.index("b.html")
+    assert listing["sessions"][1]["title"] == "documents without a known session"
+
+
+def test_the_daemon_buttons_go_through_service_control(daemon, monkeypatch):
+    asked = []
+    monkeypatch.setattr(server.service, "control", asked.append)
+    assert daemon.request("POST", "/api/daemon/restart") == (202, {"daemon": "restart"})
+    assert daemon.request("POST", "/api/daemon/stop")[0] == 202
+    assert asked == ["restart", "stop"]
+
+
+def test_a_daemon_button_without_the_client_header_is_refused(daemon, monkeypatch):
+    asked = []
+    monkeypatch.setattr(server.service, "control", asked.append)
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("POST", "/api/daemon/stop", headers={"Host": f"localhost:{daemon.port}"})
+    assert conn.getresponse().status == 403 and asked == []
+
+
+def test_a_refused_daemon_action_is_a_409_with_its_reason(daemon, monkeypatch):
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    status, body = daemon.request("POST", "/api/daemon/stop")
+    assert status == 409 and "not started by systemd" in body["error"]
+    assert daemon.request("POST", "/api/daemon/start")[0] == 409
+
+
+def test_the_send_answer_carries_the_sentence_every_surface_shows(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>Hello</p>"))["id"]
+    daemon.request("PUT", f"/api/docs/{doc_id}/annotations",
+                   [{"id": "n1", "selector": "body", "quote": "", "note": "x"}])
+    body = daemon.request("POST", f"/api/docs/{doc_id}/send")[1]
+    assert body["message"] == "1 note(s) opened in a terminal tab, in a NEW session."

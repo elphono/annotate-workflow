@@ -103,3 +103,22 @@ def test_no_function_returns_an_array_wrapped_in_a_comma():
     code = [line for line in TRAY_PS1.read_text().splitlines()
             if re.match(r"\s*return\s*,", line)]   # comments may name the trap
     assert not code, f"use `return $x`, callers wrap in @( ): {code}"
+
+
+def test_control_asks_systemd_without_waiting_and_only_under_systemd(monkeypatch):
+    from annotate import service as svc
+    launched = []
+
+    class Recorder:
+        def __init__(self, argv, **kwargs):
+            launched.append((argv, kwargs.get("start_new_session")))
+
+    monkeypatch.setattr(svc.subprocess, "Popen", Recorder)
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    with pytest.raises(svc.ServiceError, match="not started by systemd"):
+        svc.control("restart")
+    monkeypatch.setenv("INVOCATION_ID", "abc")
+    with pytest.raises(svc.ServiceError, match="unknown"):
+        svc.control("start")
+    svc.control("restart")
+    assert launched == [(["systemctl", "--user", "--no-block", "restart", svc.UNIT_NAME], True)]

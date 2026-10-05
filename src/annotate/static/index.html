@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>annotate</title>
+<style>
+  :root {
+    --accent: #ea580c; --accent-ink: #fff; --paper: #ffffff; --page: #f6f7f9;
+    --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb; --danger: #b91c1c;
+    --live: #15803d; --live-soft: #dcfce7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #1f2430; --page: #161a22; --ink: #e5e7eb; --muted: #9ca3af;
+            --line: #374151; --live: #4ade80; --live-soft: #14532d; --danger: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+  h1 { margin: 0; font-size: 22px; }
+  #daemon { color: var(--muted); font-size: 13px; flex: 1 1 200px; }
+  .daemon-actions { display: flex; gap: 6px; }
+  #message { min-height: 22px; margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
+  #message.error { color: var(--danger); }
+  section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+            margin-top: 16px; overflow: hidden; }
+  section h2 { margin: 0; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  section h2 .folder { color: var(--muted); font-weight: 400; }
+  .doc { padding: 10px 14px; border-top: 1px solid var(--line); }
+  .doc:first-of-type { border-top: 0; }
+  .doc .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .doc a.title { font-weight: 600; color: var(--ink); text-decoration: none; }
+  .doc a.title:hover { text-decoration: underline; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--ink); }
+  .badge.live { background: var(--live-soft); color: var(--live); }
+  .badge.missing { background: var(--danger); color: #fff; }
+  .path { color: var(--muted); font: 12px ui-monospace, monospace; overflow-wrap: anywhere; margin-top: 2px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  button:disabled { opacity: .5; cursor: progress; }
+  .empty { color: var(--muted); margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>annotate</h1>
+    <span id="daemon">…</span>
+    <span class="daemon-actions">
+      <button id="restart" title="systemctl --user restart annotate">Restart daemon</button>
+      <button id="stop" class="danger" title="systemctl --user stop annotate">Stop daemon</button>
+    </span>
+  </header>
+  <div id="message" role="status"></div>
+  <div id="groups"></div>
+</main>
+<script src="/static/index.js"></script>
+</body>
+</html>

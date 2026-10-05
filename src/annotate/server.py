@@ -1,6 +1,7 @@
 """The daemon: an HTTP server on 127.0.0.1 that serves documents and the API.
 
-    GET    /                                 index of registered documents
+    GET    /                                 the index page (static/index.html):
+                                             every tray control, in the browser
     GET    /docs/<id>                        the HTML, overlay injected, read from disk
     GET    /docs/<id>/files/<relative>       a file next to the document (images…)
     GET    /static/<name>                    annotate.js, annotate.css
@@ -13,6 +14,7 @@
     POST   /api/docs/<id>/wait               held until notes come (`annotate wait`)
     POST   /api/docs/<id>/open               open the document in the browser
     DELETE /api/docs/<id>[?delete=1]         forget it (and delete the file)
+    POST   /api/daemon/<restart|stop>        ask systemd (see service.control)
 
 **Local only, and no open CORS.** The socket is bound to 127.0.0.1. Any web
 page in the user's browser can still fire a "simple" cross-site POST at
@@ -43,7 +45,8 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import browser, claude, config, htmldoc, listeners, registry, scanner, sender
+from . import (browser, claude, config, htmldoc, listeners, registry, scanner, sender,
+               service)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -174,6 +177,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except sender.NothingToSend as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
+        except service.ServiceError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
         except (registry.RegistryError, sender.SendError, browser.OpenError,
                 htmldoc.HtmlDocError, listeners.ListenerError) as exc:
             log.error("%s %s: %s", method, self.path, exc)
@@ -198,7 +203,12 @@ class Handler(BaseHTTPRequestHandler):
     def _dispatch(self, method: str, parts: list[str],
                   query: dict[str, list[str]], raw_path: str) -> None:
         if method == "GET" and not parts:
-            return self._index()
+            return self._send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(),
+                              "text/html; charset=utf-8")
+        if method == "POST" and parts[:2] == ["api", "daemon"] and len(parts) == 3:
+            service.control(parts[2])
+            log.info("daemon %s requested from the web page", parts[2])
+            return self._json(HTTPStatus.ACCEPTED, {"daemon": parts[2]})
         if method == "GET" and parts[0] == "static" and len(parts) == 2:
             target = contained_file(STATIC, parts[1])
             kind = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
@@ -296,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(HTTPStatus.OK, {"annotations": items})
         if method == "POST" and action in ("send", "new-session"):
             result = self.server.sender.dispatch(doc_id, fresh=action == "new-session")
-            return self._json(HTTPStatus.OK, result)
+            return self._json(HTTPStatus.OK, {**result, "message": sender.describe(result)})
         if method == "POST" and action == "wait":
             return self._wait(doc_id)
         if method == "POST" and action == "open":
@@ -305,29 +315,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, {"url": url,
                                               "opener": browser.open_url(url)})
         raise Refused(HTTPStatus.NOT_FOUND, "not found")
-
-    def _index(self) -> None:
-        rows = []
-        docs = {d["id"]: d for d in registry.summary()}
-        for group in registry.group_by_session(list(docs.values()), claude.title,
-                                               config.workspace()):
-            rows.append(f'<tr><th colspan="4" class="session">'
-                        f'{htmldoc.html.escape(group["label"])}</th></tr>')
-            for doc_id in group["docs"]:
-                doc = docs[doc_id]
-                title = htmldoc.html.escape(doc.get("title") or doc["path"])
-                rows.append(
-                    f'<tr><td><a href="/docs/{doc["id"]}">{title}</a></td>'
-                    f'<td>{doc["status"]}</td><td>{doc["pending"]}/{doc["annotations"]}</td>'
-                    f'<td><code>{htmldoc.html.escape(doc["path"])}</code></td></tr>')
-        page = ("<!doctype html><meta charset='utf-8'><title>annotate</title>"
-                "<style>body{font:15px system-ui;margin:2em}td{padding:4px 10px}"
-                "code{font-size:12px;color:#555}th.session{text-align:left;"
-                "padding:18px 10px 4px;border-bottom:1px solid #ccc}</style>"
-                "<h1>annotate</h1>"
-                "<table><tr><th>Document</th><th>Status</th><th>To send / all</th>"
-                "<th>Path</th></tr>" + "".join(rows) + "</table>")
-        self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
 
 
 def listeners_session_ok(session: str) -> bool:

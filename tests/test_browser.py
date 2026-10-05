@@ -93,3 +93,51 @@ def test_overlay_in_a_real_browser(tmp_path, monkeypatch, make_doc):
     assert "Keep this idea somewhere" in prompt and "Anchor: lost" in prompt
     assert "Section: Overlay check" in prompt
     assert opener.calls == [], "a session listened: no terminal tab"
+
+
+INDEX_SCRIPT = Path(__file__).resolve().parent / "browser" / "index_check.mjs"
+
+
+@pytest.mark.browser
+def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_doc):
+    from annotate import claude
+    from fakes import compact, transcript
+    pw_dir = os.environ.get("ANNOTATE_PLAYWRIGHT_DIR", "")
+    node = shutil.which("node")
+    assert pw_dir and node, "see test_overlay_in_a_real_browser"
+    transcript(claude.projects_dir(), "s-live", lines=(
+        compact({"type": "ai-title", "aiTitle": "Live session"}),))
+    alpha = registry.register(make_doc("<p>a</p>", name="a.html", title="Alpha"),
+                              session="s-live")["id"]
+    bravo_path = make_doc("<p>b</p>", name="b.html", title="Bravo")
+    bravo = registry.register(bravo_path, session="")["id"]
+    charlie_path = make_doc("<p>c</p>", name="c.html", title="Charlie")
+    charlie = registry.register(charlie_path, session="s-live")["id"]
+    registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
+                                          "note": "from the index page"}])
+    asked: list[str] = []
+    monkeypatch.setattr(server.service, "control", asked.append)
+    cfg = config.load_config()
+    opener = RecordingOpener()
+    srv = server.make_server(cfg, port=0, send=sender.Sender(cfg, opener=opener))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    box: dict[str, object] = {}
+    listener = threading.Thread(target=lambda: box.update(
+        waiter=srv.sender.board.wait(alpha, "s-live", "/", lambda: True, 110)), daemon=True)
+    listener.start()
+    out = Path(os.environ.get("ANNOTATE_BROWSER_OUT", tmp_path))
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        done = subprocess.run([node, str(INDEX_SCRIPT), pw_dir, f"http://localhost:{srv.port}",
+                               str(out)], capture_output=True, text=True, timeout=120)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    print(done.stdout)
+    assert done.returncode == 0, done.stdout + done.stderr
+    listener.join(5)
+    assert "from the index page" in box["waiter"].prompt  # type: ignore[union-attr]
+    assert opener.calls == []
+    assert set(registry.all_docs()) == {alpha}
+    assert bravo_path.exists() and not charlie_path.exists()
+    assert bravo and charlie and asked == ["restart", "stop"]

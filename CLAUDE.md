@@ -42,6 +42,13 @@ début du dernier passage, si bien qu'un fichier écrit démon arrêté est trou
 suivant, et qu'un document oublié ne revient que s'il est réécrit. `figures/` est exclu des deux
 voies : ce sont les sources HTML des images d'un document.
 
+**La page d'accueil (`/`, ouverte d'un clic gauche sur la pastille) porte tous les contrôles
+de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; pour
+le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
+démon n'a pas été lancé par systemd). **Start n'y est pas, et ne peut pas y être** : un démon
+arrêté ne sert plus de page où cliquer ; il reste dans la pastille. La page passe par la même
+API que la pastille, avec la même garde (`X-Annotate`, origine locale).
+
 **La pastille et la page d'accueil classent les documents par session** : le titre de la
 session (son `/rename`, sinon celui que Claude Code a généré, lus dans le transcript, de façon
 incrémentale) et son dossier ; les documents sans session connue viennent en dernier.

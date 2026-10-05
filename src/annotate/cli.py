@@ -120,19 +120,8 @@ def cmd_open(args: argparse.Namespace, cfg: config.Config) -> int:
 
 def _post(cfg: config.Config, doc_id: str, action: str) -> int:
     result = client.call(cfg.port, "POST", f"/api/docs/{doc_id}/{action}", timeout=60)
-    print(describe(result))
+    print(result.get("message") or result)
     return 0
-
-
-def describe(result: dict[str, object]) -> str:
-    """Where the notes went, in one line (also what the browser says)."""
-    count = result.get("count")
-    if result.get("target") == "session":
-        return f"{count} note(s) delivered to the open session {result.get('session') or ''}".rstrip()
-    if result.get("fresh"):
-        return f"{count} note(s) opened in a terminal tab, in a NEW session"
-    return (f"{count} note(s) opened in a terminal tab: no open session listened, "
-            f"session {result.get('session')} resumed there")
 
 
 def cmd_send(args: argparse.Namespace, cfg: config.Config) -> int:

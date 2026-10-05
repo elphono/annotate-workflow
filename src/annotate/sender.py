@@ -48,6 +48,20 @@ def _stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
+def describe(result: dict[str, Any]) -> str:
+    """Where the notes went, in one line: what the CLI prints, and what the
+    overlay and the index page show (one wording, written once)."""
+    count = result.get("count")
+    if result.get("target") == "session":
+        session = result.get("session") or ""
+        return f"{count} note(s) delivered to the open session {session}".rstrip() + \
+            ": it answers there."
+    if result.get("fresh"):
+        return f"{count} note(s) opened in a terminal tab, in a NEW session."
+    return (f"{count} note(s) opened in a terminal tab: no open session listened, "
+            f"session {result.get('session')} resumed there.")
+
+
 class Sender:
     def __init__(self, cfg: Config, board: listeners.Board | None = None,
                  opener: Any = terminal.open_session) -> None:
