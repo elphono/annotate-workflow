@@ -1,11 +1,17 @@
 [project]
-name = "annotate-workflow"
+name = "redmargin"
 version = "0.1.0"
-description = "Annotate the HTML documents a Claude Code session produced, and send the notes back to that session"
+description = "Pin notes on the HTML documents Claude Code writes, in your browser; the notes flow back to the live session that wrote them"
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["claude-code", "annotation", "html", "review"]
 # No runtime dependency, on purpose: the daemon is `http.server`, the config is
 # `tomllib`, the registry is `json`. See CLAUDE.md, "Invariants".
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/elphono/redmargin"
+Issues = "https://github.com/elphono/redmargin/issues"
 
 [project.scripts]
 annotate = "annotate.cli:main"

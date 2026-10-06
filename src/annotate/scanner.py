@@ -3,7 +3,7 @@
 The hook (hooks/register-on-write.py) fires on `Write` and `Edit` only. A
 document a session produces with Bash (a script, a `cp` from its scratchpad,
 the usual way of subagents) never reaches it: measured 2026-10-05,
-`<repo>/docs/<name>.html` was composed by an agent
+`<repo>/docs/<name>.html` was composed by a subagent
 in its scratchpad and copied into `docs/` at 16:08, an hour after the hook
 existed, and never appeared in the tray.
 

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" width="960" height="470" role="img" aria-labelledby="t d" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title id="t">How redmargin works</title>
+  <desc id="d">A Claude Code session writes an HTML document and registers it with the redmargin daemon. The daemon serves the page with an annotation overlay to the browser. Notes pinned in the browser travel back through the daemon to the live session, by one of three routes.</desc>
+  <rect x="0" y="0" width="960" height="470" rx="14" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- the three actors -->
+  <rect x="30" y="50" width="250" height="110" rx="12" fill="#eef2fb" stroke="#2f4f7f" stroke-width="2"/>
+  <text x="155" y="92" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2d4a">Claude Code session</text>
+  <text x="155" y="122" text-anchor="middle" font-size="15" fill="#33415c">writes docs/report.html</text>
+
+  <rect x="355" y="50" width="250" height="110" rx="12" fill="#f1f3f5" stroke="#44505e" stroke-width="2"/>
+  <text x="480" y="92" text-anchor="middle" font-size="20" font-weight="700" fill="#1f2933">redmargin daemon</text>
+  <text x="480" y="122" text-anchor="middle" font-size="15" fill="#3c4856">127.0.0.1:8765 · plain Python</text>
+
+  <rect x="680" y="50" width="250" height="110" rx="12" fill="#fdecec" stroke="#c62828" stroke-width="2"/>
+  <text x="805" y="92" text-anchor="middle" font-size="20" font-weight="700" fill="#7f1d1d">Your browser</text>
+  <text x="805" y="122" text-anchor="middle" font-size="15" fill="#7a2a2a">Alt+click pins a note</text>
+
+  <!-- document flow (blue), top arrows -->
+  <line x1="284" y1="85" x2="342" y2="85" stroke="#2f4f7f" stroke-width="3"/>
+  <polygon points="351,85 340,78 340,92" fill="#2f4f7f"/>
+  <line x1="609" y1="85" x2="667" y2="85" stroke="#2f4f7f" stroke-width="3"/>
+  <polygon points="676,85 665,78 665,92" fill="#2f4f7f"/>
+  <text x="317" y="40" text-anchor="middle" font-size="15" font-weight="700" fill="#2f4f7f">① hook</text>
+  <text x="642" y="40" text-anchor="middle" font-size="15" font-weight="700" fill="#2f4f7f">② page + overlay</text>
+
+  <!-- notes flow (red), bottom arrows, right to left -->
+  <line x1="676" y1="128" x2="618" y2="128" stroke="#c62828" stroke-width="3"/>
+  <polygon points="609,128 620,121 620,135" fill="#c62828"/>
+  <line x1="351" y1="128" x2="293" y2="128" stroke="#c62828" stroke-width="3"/>
+  <polygon points="284,128 295,121 295,135" fill="#c62828"/>
+  <text x="642" y="186" text-anchor="middle" font-size="15" font-weight="700" fill="#c62828">③ Send to session</text>
+  <text x="317" y="186" text-anchor="middle" font-size="15" font-weight="700" fill="#c62828">④ the notes come back</text>
+
+  <!-- the three delivery routes -->
+  <rect x="30" y="226" width="900" height="214" rx="12" fill="#fafbfc" stroke="#d0d7de"/>
+  <text x="54" y="262" font-size="17" font-weight="700" fill="#1f2933">④ How the notes reach the session that wrote the document</text>
+
+  <rect x="54" y="282" width="268" height="132" rx="10" fill="#ffffff" stroke="#c62828" stroke-width="2"/>
+  <text x="70" y="312" font-size="16" font-weight="700" fill="#7f1d1d">A · It is waiting</text>
+  <text x="70" y="338" font-size="14.5" fill="#33404d">The session ran `annotate wait`</text>
+  <text x="70" y="360" font-size="14.5" fill="#33404d">in the background. The command</text>
+  <text x="70" y="382" font-size="14.5" fill="#33404d">returns the notes: Claude Code</text>
+  <text x="70" y="404" font-size="14.5" fill="#33404d">wakes the same conversation.</text>
+
+  <rect x="346" y="282" width="268" height="132" rx="10" fill="#ffffff" stroke="#c62828" stroke-width="2"/>
+  <text x="362" y="312" font-size="16" font-weight="700" fill="#7f1d1d">B · It is open</text>
+  <text x="362" y="338" font-size="14.5" fill="#33404d">Nobody is waiting, but the session</text>
+  <text x="362" y="360" font-size="14.5" fill="#33404d">is alive: the notes are posted to</text>
+  <text x="362" y="382" font-size="14.5" fill="#33404d">its inbox, behind an Approve /</text>
+  <text x="362" y="404" font-size="14.5" fill="#33404d">Deny dialog. No second tab.</text>
+
+  <rect x="638" y="282" width="268" height="132" rx="10" fill="#ffffff" stroke="#c62828" stroke-width="2"/>
+  <text x="654" y="312" font-size="16" font-weight="700" fill="#7f1d1d">C · It is gone</text>
+  <text x="654" y="338" font-size="14.5" fill="#33404d">A Windows Terminal tab opens</text>
+  <text x="654" y="360" font-size="14.5" fill="#33404d">and runs `claude --resume` on</text>
+  <text x="654" y="382" font-size="14.5" fill="#33404d">that session, interactive and</text>
+  <text x="654" y="404" font-size="14.5" fill="#33404d">visible. Never in the background.</text>
+</svg>

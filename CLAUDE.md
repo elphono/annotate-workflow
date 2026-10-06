@@ -1,6 +1,12 @@
-# annotate-workflow
+# redmargin
 
-Successeur du pont papier de `../remarkable-sync`, sans tablette. **Le besoin** : quand une
+**Le dépôt est public** (<https://github.com/elphono/redmargin>) et s'appelait `annotate-workflow` jusqu'au
+2026-10-06. La commande reste `annotate` et le paquet Python aussi ; le dossier local garde l'ancien
+nom, parce que le renommer casserait ce qui en porte le chemin — shebangs du `.venv`, unité systemd,
+hook de `~/.claude/settings.json`, raccourci Démarrage de la pastille. Le README et la ROADMAP sont
+la vitrine ; ce fichier est le mode d'emploi de qui modifie le code.
+
+Successeur du pont papier de remarkable-sync (dépôt privé de l'auteur), sans tablette. **Le besoin** : quand une
 session Claude Code produit un document HTML, son lecteur l'annote dans son navigateur, et les
 annotations reviennent toutes seules **dans la conversation ouverte** qui l'a produit (ou, si
 aucune n'attend, dans un onglet de terminal qui la reprend). Rester simple : faciliter l'échange
@@ -38,7 +44,7 @@ une session attend ? ── oui ─► `annotate wait` rend les notes et sort : 
 | le hook (push) | les `Write` et `Edit` d'une session | la session à coup sûr, et la consigne `annotate wait` |
 | le parcours du démon (toutes les 30 s) | tout `.html` écrit sous un `docs/` **depuis son premier passage** | ce que Bash écrit (`cp` depuis un scratchpad, scripts, sous-agents) ; la session est retrouvée dans les transcripts |
 
-Mesuré le 2026-10-05 : `<repo>/docs/<name>.html`, composé par un
+Mesuré le 2026-10-05 : un `docs/<nom>.html` d'un dépôt du workspace, composé par un
 sous-agent dans son scratchpad puis copié par `cp`, n'est jamais passé par le hook. **Rien
 d'antérieur au premier passage n'est repris** (décision du 2026-10-05) : `scan.json` garde le
 début du dernier passage, si bien qu'un fichier écrit démon arrêté est trouvé au démarrage
@@ -88,8 +94,20 @@ Configuration : `~/.config/annotate/config.toml` (`port`, `claude_bin`), surchar
 
 **Anglais** dans tout ce qui est code : identifiants, commentaires, docstrings, noms de tests,
 messages de log, libellés de l'overlay et de la pastille. **Français** pour ce fichier, les
-documents de `docs/` et les messages de commit. Aucune exception n'est déclarée : des libellés
-d'interface en français en seraient une, à écrire ici avant de les écrire dans le code.
+documents de `docs/` et les messages de commit.
+
+**Une exception, déclarée le 2026-10-06 : `README.md` et `ROADMAP.md` sont en anglais**, parce que
+ce sont la vitrine d'un dépôt public. Des libellés d'interface en français seraient une autre
+exception, à écrire ici avant de les écrire dans le code.
+
+## Ce dépôt est public
+
+Rien de ce qui appartient à un projet d'employeur n'y entre : ni nom de dépôt ou de produit, ni
+chemin réel, ni nom de session, ni clé de ticket, ni hôte. Le 2026-10-06, un chemin réel de dépôt
+d'employeur a été trouvé dans une docstring, un test et ce fichier ; il y avait été mis comme
+exemple mesuré. Il est retiré de l'arbre, **pas de l'historique** (deux commits le portent), et
+un exemple se prend désormais dans un chemin neutre (`<repo>/docs/<name>.html`). Avant d'écrire
+une mesure réelle dans un test ou une docstring, la rendre anonyme.
 
 ## Signature des commits
 
@@ -172,6 +190,9 @@ copie du dépôt et exige que la suite tombe.
   navigateur compare de son côté la date du fichier et propose « Reload ».
 
 ## Phase 2 — étudiée, pas codée
+
+La liste à jour de ce qui vient, de ce qui est reporté et de ce qui est refusé est `ROADMAP.md` ;
+cette section en garde le raisonnement.
 
 Surligner, entourer, barrer à la souris et y attacher une note (sélection `Range` + CSS Custom
 Highlight API ; rectangle sur un `<canvas>` superposé ; même ancrage). Pas d'extension Chrome :
