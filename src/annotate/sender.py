@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import claude, listeners, prompt, registry, terminal
+from . import claude, inbox, listeners, prompt, registry, terminal
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -53,6 +53,9 @@ def describe(result: dict[str, Any]) -> str:
     """Where the notes went, in one line: what the CLI prints, and what the
     overlay and the index page show (one wording, written once)."""
     count = result.get("count")
+    if result.get("target") == "inbox":
+        return (f"{count} note(s) posted to the open session {result.get('name')}: "
+                f"approve the message in that terminal.")
     if result.get("target") == "session":
         session = result.get("session") or ""
         return f"{count} note(s) delivered to the open session {session}".rstrip() + \
@@ -94,6 +97,10 @@ class Sender:
                          len(items), doc_id, waiter.session or "(unknown id)")
                 return {"doc_id": doc_id, "count": len(items), "target": "session",
                         "session": waiter.session}
+            session_id = entry.get("session_id", "")
+            opened = inbox.open_sessions(session_id) if session_id else []
+            if opened:
+                return self._post(doc_id, items, text, opened)
         folder = str(registry.usable_cwd(entry.get("cwd"), Path(entry["path"])))
         if folder != entry.get("cwd"):
             log.warning("%s: session folder %s is gone, using %s", doc_id,
@@ -115,6 +122,31 @@ class Sender:
                  f"session {resume} resumed" if resume else "new session")
         return {"doc_id": doc_id, "count": len(items), "target": "terminal",
                 "session": resume or "", "fresh": resume is None}
+
+    def _post(self, doc_id: str, items: list[dict[str, Any]], text: str,
+              opened: list[dict[str, Any]]) -> dict[str, Any]:
+        """The session is open but does not listen: post into its inbox.
+
+        Never a terminal tab from here, even when every post fails: the
+        session IS open, and a tab would resume it a second time (the duplicate
+        of 2026-10-06). The notes then stay sendable, with the reason."""
+        errors = []
+        for target in opened:                 # most recently active first
+            try:
+                inbox.post(target["messagingSocketPath"], text)
+            except inbox.InboxError as exc:
+                errors.append(str(exc))
+                continue
+            name = str(target.get("name") or target.get("pid"))
+            self._settle(doc_id, items, target="inbox")
+            log.info("%d note(s) of %s posted to the inbox of the open session %s",
+                     len(items), doc_id, name)
+            return {"doc_id": doc_id, "count": len(items), "target": "inbox",
+                    "session": str(target.get("sessionId", "")), "name": name}
+        reason = "; ".join(errors)
+        registry.update(doc_id, last_error=reason[:500])
+        raise SendError(f"the session is open but its inbox refused the notes "
+                        f"(they stay to send): {reason}")
 
     def _build(self, entry: dict[str, Any], items: list[dict[str, Any]],
                fresh: bool) -> str:

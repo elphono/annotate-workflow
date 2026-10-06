@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from annotate import claude
+from annotate import claude, inbox
 
 FORBIDDEN_PROGRAMS = frozenset({
     "claude", "ssh", "scp", "cmd.exe", "explorer.exe", "wslview",
@@ -51,6 +51,10 @@ def _isolated_data(tmp_path, monkeypatch):
     # `claude.resumable` reads ~/.claude/projects: never the user's own.
     projects = tmp_path / "claude-projects"
     monkeypatch.setattr(claude, "projects_dir", lambda: projects)
+    # `inbox.open_sessions` reads ~/.claude/sessions: a test must never find,
+    # let alone post into, one of the user's real sessions.
+    sessions = tmp_path / "claude-sessions"
+    monkeypatch.setattr(inbox, "sessions_dir", lambda: sessions)
 
 
 def _program(argv: object) -> str:

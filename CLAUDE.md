@@ -24,8 +24,11 @@ navigateur Windows ── Alt+clic → épingle + note ── PUT /api/docs/<id>
         ▼
 une session attend ? ── oui ─► `annotate wait` rend les notes et sort : Claude Code réveille
         │                     LA conversation ouverte, qui corrige x.html puis relance wait
-        └─ non ─► onglet Windows Terminal : `claude --resume <session>` interactif, avec les
-                  notes (session neuve si elle a disparu de cette machine)
+        ├─ non, mais la session est OUVERTE ─► les notes sont postées dans sa boîte de
+        │                     réception (socket de messagerie entre sessions) ; elle les
+        │                     reçoit derrière un dialogue Approve / Deny, puis relance wait
+        └─ non, et elle n'est ouverte nulle part ─► onglet Windows Terminal :
+                  `claude --resume <session>` interactif (session neuve si elle a disparu)
 ```
 
 **Deux voies d'entrée au registre, et il les faut toutes les deux** :
@@ -139,6 +142,14 @@ copie du dépôt et exige que la suite tombe.
   ouverte. L'envoi va désormais à la session qui attend (`annotate wait`), sinon dans un
   **onglet** Windows Terminal qui la reprend. Un onglet et non une fenêtre : `launchMode:
   fullscreen` ne vaut que pour les fenêtres neuves (remarkable-sync, 2026-09-17).
+- **Une session ouverte ne reçoit jamais un onglet de plus** (2026-10-06 : « ça m'a ouvert un
+  onglet avec ma session en double »). Le démon lit `~/.claude/sessions/<pid>.json` (le registre
+  de `claude agents --json`) et poste dans la boîte de réception de la session (`inbox.py`).
+  Le format de la ligne **n'est pas documenté** : capturé le 2026-10-06 sur un vrai
+  `SendMessage`, figé par `tests/test_inbox.py`. Le démon ne revendique **aucun** `from-mode` :
+  une session en `bypassPermissions` retient donc le message derrière un dialogue d'approbation,
+  décision de l'utilisateur (« dialogue à chaque envoi »). Si la boîte refuse, les notes restent
+  à envoyer, sans onglet.
 - **`wt.exe` coupe sa ligne de commande au `;`** (mesuré le 2026-10-05 : un `bash -c 'a; b'`
   n'a exécuté que la première moitié). L'onglet lance donc un script écrit sous le dossier de
   données, et le prompt passe par un fichier, jamais par la ligne de commande.
