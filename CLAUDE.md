@@ -1,7 +1,7 @@
-# redmargin
+# docpin
 
-**Le dépôt est public** (<https://github.com/elphono/redmargin>) et s'appelait `annotate-workflow` jusqu'au
-2026-10-06. La commande reste `annotate` et le paquet Python aussi ; le dossier local garde l'ancien
+**Le dépôt est public** (<https://github.com/elphono/docpin>). Il s'est appelé `annotate-workflow`, puis `redmargin`
+(2026-10-06), avant `docpin` : un nom qui dit ce que l'outil fait. La commande reste `annotate` et le paquet Python aussi ; le dossier local garde l'ancien
 nom, parce que le renommer casserait ce qui en porte le chemin — shebangs du `.venv`, unité systemd,
 hook de `~/.claude/settings.json`, raccourci Démarrage de la pastille. Le README et la ROADMAP sont
 la vitrine ; ce fichier est le mode d'emploi de qui modifie le code.

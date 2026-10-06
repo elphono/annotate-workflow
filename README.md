@@ -1,9 +1,12 @@
-# redmargin
+# docpin
 
-**Pin notes on the HTML documents Claude Code writes, right in your browser. The notes flow back to
-the live session that wrote them, and it fixes the document.**
+**React to the documents Claude Code writes. Pin a note on any passage, right in your browser — the notes
+flow back to the session that wrote the document, and it fixes it.**
 
-![How redmargin works: a Claude Code session writes a document, the daemon serves it to your browser, and your notes travel back to the same conversation](docs/figures/flow.svg)
+![How docpin works: a Claude Code session writes a document, the daemon serves it to your browser, and your notes travel back to the same conversation](docs/figures/flow.svg)
+
+A long answer from Claude Code is hard to read in a terminal and awkward to answer. docpin gives every
+HTML document the session writes a page in your browser, and a way to react to it in place.
 
 A Claude Code session writes `docs/report.html`. You open it, Alt+click the sentence that is wrong,
 type what you want instead, click **Send to session**. The session that wrote the document receives
@@ -45,8 +48,8 @@ and routes A and B, but it has not been tried; routes C and the tray icon are Wi
 ## Install
 
 ```bash
-git clone https://github.com/elphono/redmargin.git
-cd redmargin
+git clone https://github.com/elphono/docpin.git
+cd docpin
 uv sync
 
 uv run annotate service                       # writes ~/.config/systemd/user/annotate.service
@@ -69,7 +72,7 @@ workspace is registered with **that session's id**. In `~/.claude/settings.json`
         "matcher": "Write|Edit",
         "hooks": [
           { "type": "command",
-            "command": "python3 /path/to/redmargin/hooks/register-on-write.py",
+            "command": "python3 /path/to/docpin/hooks/register-on-write.py",
             "timeout": 15 }
         ]
       }
@@ -128,7 +131,10 @@ The invariants and the lessons behind them are in [CLAUDE.md](CLAUDE.md) (in Fre
 study that fixed the main choices is [docs/etude-reutilisation.html](docs/etude-reutilisation.html)
 (French; GitHub shows HTML as source, so open it from a clone).
 
+## License
+
+[MIT](LICENSE).
+
 ## Name
 
-The project is **redmargin**: the red pen in the margin. The command line is still `annotate`, and the
-Python package too.
+**docpin**: pin a note on a doc. The command line is still `annotate`, and so is the Python package, so that nothing you have set up breaks.

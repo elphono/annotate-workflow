@@ -30,7 +30,7 @@ items marked **(proposal)** are ideas, not commitments.
 3. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
    Code does not document (captured on a real message, frozen by `tests/test_inbox.py`). Re-check it
    on every Claude Code release, and switch to a documented interface if one appears.
-4. **Licence and packaging.** Pick a licence; publish so that `uvx` / `pipx` can install it without a
+4. **Packaging.** Publish so that `uvx` / `pipx` can install it without a
    clone.
 
 ## Later
