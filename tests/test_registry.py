@@ -142,3 +142,17 @@ def test_documents_are_grouped_by_session_newest_group_first(make_doc, tmp_path)
     assert groups[0]["label"] == "session s-old · repo"         # no title known
     assert groups[2]["label"] == "documents without a known session"
     assert groups[2]["docs"] == [b["id"]] and c["id"] in groups[1]["docs"]
+
+
+def test_an_agent_worktree_is_never_kept_as_the_session_folder(make_doc, tmp_path):
+    path = make_doc("<p>x</p>")
+    repo = path.parent.parent
+    gone = repo / ".claude" / "worktrees" / "agent-a90e957b"
+    entry = registry.register(path, session="s1", cwd=gone)
+    assert entry["cwd"] == str(repo)                      # the repo holding the worktree
+    gone.mkdir(parents=True)                              # even while it still exists
+    assert registry.register(path, cwd=gone)["cwd"] == str(repo)
+    assert registry.usable_cwd(tmp_path / "vanished", path) == repo
+    elsewhere = tmp_path / "other-repo"
+    elsewhere.mkdir()
+    assert registry.usable_cwd(elsewhere, path) == elsewhere

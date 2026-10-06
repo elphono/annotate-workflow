@@ -137,6 +137,33 @@ def _default_cwd(path: Path) -> Path:
     return path.parent
 
 
+WORKTREES = "/.claude/worktrees/"
+
+
+def usable_cwd(cwd: str | Path | None, path: Path) -> Path:
+    """The folder a session for `path` should work in, and one that EXISTS.
+
+    A subagent started with `isolation: worktree` runs in
+    `<repo>/.claude/worktrees/agent-<id>/`, deleted when it ends: measured
+    2026-10-06, a document copied by such an agent kept that folder as its
+    session folder, and "Send to session" failed on it the next day. So: the
+    given folder if it exists and is not an agent worktree; else the
+    repository that holds the worktree; else the repository of the document;
+    else its folder."""
+    candidates: list[Path] = []
+    if cwd:
+        text = str(cwd)
+        if WORKTREES in text + "/":
+            candidates.append(Path(text.split(WORKTREES.rstrip("/"))[0]))
+        else:
+            candidates.append(Path(text))
+    candidates += [_default_cwd(path), path.parent]
+    for folder in candidates:
+        if folder.is_dir():
+            return folder
+    return path.parent
+
+
 def all_docs() -> dict[str, dict[str, Any]]:
     with locked():
         return _read_docs()
@@ -179,8 +206,8 @@ def register(path: Path, session: str | None = None,
             "path": str(path),
             "title": title,
             "session_id": entry.get("session_id", "") if session is None else session,
-            "cwd": str((cwd.expanduser().resolve() if cwd else None)
-                       or entry.get("cwd") or _default_cwd(path)),
+            "cwd": str(usable_cwd(cwd.expanduser().resolve() if cwd else
+                                  entry.get("cwd"), path)),
             "registered_at": now_iso(),
             "sent_at": entry.get("sent_at", ""),
         })

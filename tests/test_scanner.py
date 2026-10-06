@@ -108,6 +108,7 @@ def test_figures_and_tool_folders_are_never_documents(ws):
     "repo/docs/a.html", "repo/docs/specs/b.html", "repo/docs/figures/x/tpl.html",
     "repo/docs/.git/c.html", "repo/src/d.html", "repo/docs.html", "repo/docs/e.md",
     "docs/f.html", "repo/doc/g.html", "repo/docs/node_modules/h.html",
+    "repo/.claude/worktrees/agent-1/docs/i.html",
 ])
 def test_the_hook_and_the_scan_agree_on_what_a_document_is(ws, relative):
     spec = importlib.util.spec_from_file_location("register_on_write", HOOK)
@@ -140,3 +141,11 @@ def test_an_unreadable_state_is_an_error_not_a_backfill(ws):
     scanner.state_path().write_text("{broken")
     with pytest.raises(scanner.ScanError):
         scanner.scan_once(ws, now=2000.0)
+
+
+def test_a_document_inside_an_agent_worktree_is_not_registered(ws):
+    """A temporary copy, deleted with the agent (2026-10-06: it stayed listed as
+    'file missing')."""
+    scanner.scan_once(ws, now=2000.0)
+    write(ws, "repo/.claude/worktrees/agent-a9/docs/install.html", 2500.0)
+    assert scanner.scan_once(ws, now=3000.0) == []

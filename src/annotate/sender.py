@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from . import claude, listeners, prompt, registry, terminal
@@ -93,6 +94,12 @@ class Sender:
                          len(items), doc_id, waiter.session or "(unknown id)")
                 return {"doc_id": doc_id, "count": len(items), "target": "session",
                         "session": waiter.session}
+        folder = str(registry.usable_cwd(entry.get("cwd"), Path(entry["path"])))
+        if folder != entry.get("cwd"):
+            log.warning("%s: session folder %s is gone, using %s", doc_id,
+                        entry.get("cwd"), folder)
+            registry.update(doc_id, cwd=folder)
+            entry = {**entry, "cwd": folder}
         session = "" if fresh else entry.get("session_id", "")
         resume = session if session and claude.resumable(session) else None
         text = self._build(entry, items, fresh=resume is None)

@@ -178,3 +178,12 @@ def test_a_double_click_hands_the_notes_over_once(doc, opener):
     thread.join(5)
     assert sorted(outcomes) == ["nothing", "session"]  # type: ignore[type-var]
     assert opener.calls == []
+
+
+def test_a_session_folder_that_vanished_falls_back_to_the_documents_repo(doc, send, opener):
+    """2026-10-06: the folder was an agent worktree, deleted since."""
+    registry.update(doc, cwd="/nowhere/.claude/worktrees/agent-x")
+    registry.replace_annotations(doc, [note("n1", "x")])
+    send.dispatch(doc)
+    repo = str(registry._default_cwd(__import__("pathlib").Path(registry.get(doc)["path"])))
+    assert opener.calls[0]["cwd"] == repo and registry.get(doc)["cwd"] == repo

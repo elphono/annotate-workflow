@@ -48,7 +48,9 @@ def annotate_command() -> list[str] | None:
 # The same folders the daemon's scan skips (src/annotate/scanner.py), `figures/`
 # above all: the HTML sources of a document's images are not documents.
 SKIPPED = frozenset({".git", "node_modules", ".venv", "__pycache__", ".mypy_cache",
-                     ".pytest_cache", ".ruff_cache", "figures"})
+                     ".pytest_cache", ".ruff_cache", "figures",
+                     # agent worktrees: temporary copies, deleted with the agent
+                     ".claude"})
 
 
 def wanted(path: Path, root: Path) -> bool:

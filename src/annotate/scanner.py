@@ -37,7 +37,9 @@ SCAN_EVERY = 30.0
 # HTML sources of a document's images live (docs/figures/<x>/tpl.html): they
 # are inputs of a picture, not documents to read.
 SKIPPED = frozenset({".git", "node_modules", ".venv", "__pycache__", ".mypy_cache",
-                     ".pytest_cache", ".ruff_cache", "figures"})
+                     ".pytest_cache", ".ruff_cache", "figures",
+                     # agent worktrees: temporary copies, deleted with the agent
+                     ".claude"})
 
 
 class ScanError(Exception):
