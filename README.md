@@ -61,8 +61,8 @@ uv run annotate status                        # daemon up on :8765, 0 document(s
 uv run annotate tray --start                  # optional, Windows: tray icon + Startup shortcut
 ```
 
-Then register the hook, so that every HTML document a session writes under a `docs/` folder of your
-workspace is registered with **that session's id**. In `~/.claude/settings.json`:
+Then register the hook, so that every HTML document a session writes in a **tracked folder** is
+registered with **that session's id**. In `~/.claude/settings.json`:
 
 ```json
 {
@@ -81,14 +81,20 @@ workspace is registered with **that session's id**. In `~/.claude/settings.json`
 }
 ```
 
-Hooks load when a session starts: open a **new** session after editing the file. The workspace is
-`~/workspace` unless you set `ANNOTATE_WORKSPACE`. The daemon also scans the workspace every 30
-seconds, which catches documents written by Bash (`cp` from a scratchpad, subagents) that never go
-through the hook.
+Hooks load when a session starts: open a **new** session after editing the file. The daemon also
+walks the tracked folders every 30 seconds, which catches documents written by Bash (`cp` from a
+scratchpad, subagents) that never go through the hook.
+
+**Tracked folders.** Out of the box, one: the `docs/` folders of your workspace (`~/workspace`
+unless you set `ANNOTATE_WORKSPACE`). Add any folder under your home directory from the home page
+(or `annotate folders add <folder>`): every `.html` file under it is tracked, except in `build/`,
+`node_modules/`, `figures/` and the like. Adding a folder takes its files of the last days;
+**Rescan all folders** does the same everywhere, for 1, 7, 30 or 90 days. A document you unmanaged
+stays out until it is written again.
 
 ## Use
 
-1. In a Claude Code session, ask for an HTML document under a `docs/` folder. The hook registers it and
+1. In a Claude Code session, ask for an HTML document in a tracked folder. The hook registers it and
    tells the session to run `annotate wait <id>` in the background.
 2. Open the home page (`http://127.0.0.1:8765/`, or a left click on the tray icon), then the document.
 3. **Alt+click** anywhere to pin a note. Select text first and the note quotes exactly that selection.
@@ -96,13 +102,16 @@ through the hook.
    never sent go out.
 
 The home page groups documents by session — its title, then its folder — and carries every control:
-Open, Send to session, New session, Unmanage, Delete file, and Restart / Stop for the daemon.
+Open, Send to session, New session, Unmanage, Delete file; the tracked folders and the rescan; and
+Restart / Stop for the daemon.
 
 ```bash
 uv run annotate list                 # one line per document
 uv run annotate send <id>            # same as the button
 uv run annotate new-session <id>     # the unsent notes go to a NEW session (a terminal tab)
 uv run annotate forget <id> [--delete]
+uv run annotate folders [add|remove <folder>]   # the tracked folders
+uv run annotate rescan [--days 7] [--folder F]  # register what was written recently
 uv run annotate status
 ```
 

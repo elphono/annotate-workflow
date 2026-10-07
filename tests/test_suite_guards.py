@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from annotate import claude, config
+from annotate import claude, config, folders
 
 
 def _decoy(folder: Path, name: str) -> str:
@@ -65,3 +65,11 @@ def test_the_data_directory_is_not_the_real_one(tmp_path):
 
 def test_the_claude_transcripts_are_not_the_real_ones(tmp_path):
     assert claude.projects_dir().is_relative_to(tmp_path)
+
+
+def test_the_tracked_folders_are_not_the_real_ones(tmp_path):
+    """A scan in a test would otherwise walk the user's workspace, and a
+    folder added in a test would be checked against the real home."""
+    assert config.workspace().is_relative_to(tmp_path)
+    assert all(Path(f["path"]).is_relative_to(tmp_path.resolve()) for f in folders.load())
+    assert folders.home() == tmp_path.resolve()

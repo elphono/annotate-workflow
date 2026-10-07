@@ -234,7 +234,8 @@ def test_static_files_and_index(daemon, make_doc):
     status, page = daemon.request("GET", "/")
     assert status == 200 and '<script src="/static/index.js">' in page
     status, js = daemon.request("GET", "/static/index.js", raw=True)
-    assert status == 200 and b"/api/docs" in js
+    assert status == 200 and b"/api/docs" in js and b"/api/folders" in js
+    assert b"/api/scan" in js
 
 
 def test_a_missing_file_is_gone_not_a_crash(daemon, make_doc):
@@ -288,3 +289,83 @@ def test_the_send_answer_carries_the_sentence_every_surface_shows(daemon, make_d
                    [{"id": "n1", "selector": "body", "quote": "", "note": "x"}])
     body = daemon.request("POST", f"/api/docs/{doc_id}/send")[1]
     assert body["message"] == "1 note(s) opened in a terminal tab, in a NEW session."
+
+
+# -- tracked folders and the rescan (2026-10-07) --------------------------------
+
+def _settled(daemon):
+    import time
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        body = daemon.request("GET", "/api/folders")[1]
+        if body["scan"]["running"] is None:
+            return body
+        time.sleep(0.02)
+    raise AssertionError("the rescan never ended")
+
+
+def test_a_folder_added_from_the_page_is_tracked_and_its_recent_files_taken(daemon,
+                                                                            tmp_path):
+    import os
+    import time
+    reports = tmp_path / "reports"
+    (reports / "run-1").mkdir(parents=True)
+    fresh = reports / "run-1" / "fresh.html"
+    fresh.write_text("<title>Fresh</title>")
+    old = reports / "old.html"
+    old.write_text("<title>Old</title>")
+    os.utime(old, (time.time() - 40 * 86400,) * 2)
+    status, body = daemon.request("POST", "/api/folders", {"path": str(reports), "days": 7})
+    assert status == 201 and body["started"] is True
+    listing = _settled(daemon)
+    assert {"path": str(reports.resolve()), "docs_only": False, "exists": True} \
+        in listing["folders"]
+    assert listing["scan"]["last"]["added"] == 1
+    assert [d["path"] for d in registry.all_docs().values()] == [str(fresh)]
+
+
+def test_a_rescan_from_the_page_covers_every_folder(daemon, tmp_path):
+    doc = tmp_path / "workspace" / "repo" / "docs" / "a.html"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("<title>A</title>")
+    assert daemon.request("POST", "/api/scan", {"days": 1}) == \
+        (202, {"started": True, "days": 1.0})
+    assert _settled(daemon)["scan"]["last"]["added"] == 1
+    assert daemon.request("POST", "/api/scan")[1]["days"] == 7.0    # no body: the default
+    _settled(daemon)
+
+
+def test_a_folder_removed_from_the_page_is_no_longer_listed(daemon, tmp_path):
+    ws = str((tmp_path / "workspace").resolve())
+    (tmp_path / "workspace").mkdir()
+    assert [f["path"] for f in daemon.request("GET", "/api/folders")[1]["folders"]] == [ws]
+    status, body = daemon.request("DELETE", "/api/folders?path=" + ws)
+    assert status == 200 and body["removed"]["path"] == ws
+    assert daemon.request("GET", "/api/folders")[1]["folders"] == []
+    assert daemon.request("DELETE", "/api/folders?path=" + ws)[0] == 400
+
+
+@pytest.mark.parametrize("body", [{"path": "/usr"}, {"path": "relative"}, {},
+                                  {"path": "~", "days": 0}])
+def test_a_bad_folder_or_window_is_a_400_with_its_reason(daemon, body):
+    status, answer = daemon.request("POST", "/api/folders", body)
+    assert status == 400 and answer["error"]
+    assert daemon.request("POST", "/api/scan", {"days": "x"})[0] == 400
+
+
+def test_folder_and_rescan_requests_need_the_client_header(daemon, tmp_path):
+    for method, path in (("POST", "/api/folders"), ("POST", "/api/scan"),
+                         ("DELETE", "/api/folders?path=/x")):
+        conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+        conn.request(method, path, body=json.dumps({"path": str(tmp_path)}),
+                     headers={"Host": f"localhost:{daemon.port}"})
+        assert conn.getresponse().status == 403
+        conn.close()
+    assert daemon.srv.catchups.state() == {"running": None, "last": None}
+
+
+def test_the_folder_field_is_offered_subfolders(daemon, tmp_path):
+    (tmp_path / "pick" / "alpha").mkdir(parents=True)
+    from urllib.parse import quote
+    body = daemon.request("GET", "/api/folders/suggest?path=" + quote(str(tmp_path / "pick") + "/"))[1]
+    assert body["folders"] == [str((tmp_path / "pick" / "alpha").resolve())]

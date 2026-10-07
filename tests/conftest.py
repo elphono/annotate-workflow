@@ -4,7 +4,9 @@ Three autouse fixtures, each closing a failure that cost something real in
 remarkable-sync, from which they are adapted:
 
 - `_isolated_data`: no test reads or writes the user's registry, annotations,
-  config or Claude Code transcripts. A test writing `~/.local/share/annotate/registry.json` would make
+  config or Claude Code transcripts, nor walks the user's workspace or home
+  directory (the tracked folders default to the workspace, and a folder can
+  only be added under the home directory). A test writing `~/.local/share/annotate/registry.json` would make
   the tray icon and the browser show a fake document.
 - `_no_outside_process`: no test launches `claude` (billed, can edit files,
   an interactive one blocks the suite: measured 9 s of billed session the day
@@ -31,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from annotate import claude, inbox
+from annotate import claude, folders, inbox
 
 FORBIDDEN_PROGRAMS = frozenset({
     "claude", "ssh", "scp", "cmd.exe", "explorer.exe", "wslview",
@@ -55,6 +57,11 @@ def _isolated_data(tmp_path, monkeypatch):
     # let alone post into, one of the user's real sessions.
     sessions = tmp_path / "claude-sessions"
     monkeypatch.setattr(inbox, "sessions_dir", lambda: sessions)
+    # The tracked folders: the default one is the workspace, and a folder is
+    # added only under the home directory. Both point inside the test.
+    monkeypatch.setenv("ANNOTATE_WORKSPACE", str(tmp_path / "workspace"))
+    home = tmp_path.resolve()
+    monkeypatch.setattr(folders, "home", lambda: home)
 
 
 def _program(argv: object) -> str:
@@ -112,8 +119,9 @@ def _no_real_signal(monkeypatch, request, _no_outside_process):
 
 @pytest.fixture
 def make_doc(tmp_path):
-    """Write an HTML document inside a throwaway git-like repository."""
-    repo = tmp_path / "repo"
+    """Write an HTML document inside a throwaway git-like repository, in the
+    test's workspace: under a `docs/` folder, it is a document the hook takes."""
+    repo = tmp_path / "workspace" / "repo"
     (repo / ".git").mkdir(parents=True, exist_ok=True)
 
     def make(body: str, name: str = "doc.html", title: str = "Test doc",

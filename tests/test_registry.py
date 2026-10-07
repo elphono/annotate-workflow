@@ -122,7 +122,7 @@ def test_unknown_or_malformed_ids_are_refused():
 
 
 def test_documents_are_grouped_by_session_newest_group_first(make_doc, tmp_path):
-    root = tmp_path
+    root = tmp_path / "workspace"
     a = registry.register(make_doc("<p>a</p>", name="a.html"), session="s-old",
                           cwd=root / "repo")
     b = registry.register(make_doc("<p>b</p>", name="b.html"), session="")
@@ -156,3 +156,13 @@ def test_an_agent_worktree_is_never_kept_as_the_session_folder(make_doc, tmp_pat
     elsewhere = tmp_path / "other-repo"
     elsewhere.mkdir()
     assert registry.usable_cwd(elsewhere, path) == elsewhere
+
+
+def test_an_unmanaged_document_is_remembered_with_its_date_until_written_again(make_doc):
+    import os
+    path = make_doc("<p>x</p>")
+    os.utime(path, (5000.0, 5000.0))
+    registry.forget(registry.register(path)["id"])
+    assert registry.dismissed(path, 5000.0) and not registry.dismissed(path, 5001.0)
+    registry.register(path)                         # written again: the hook took it
+    assert not registry.dismissed(path, 5000.0)

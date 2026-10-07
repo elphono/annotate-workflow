@@ -5,6 +5,12 @@ Layout under `config.data_dir()` (default `~/.local/share/annotate`):
     registry.json            {"version": 1, "docs": {id: entry}}
     registry.lock            flock target, never read
     annotations/<id>.json    {"doc_id": id, "annotations": [...]}
+    forgotten.json           {"version": 1, "forgotten": {path: mtime}}
+
+**A document the user unmanaged stays out until it is written again**:
+`forget` records the file's date, and the catch-up pass of a rescan
+(scanner.catch_up) skips a file whose date has not moved since. Without it,
+"Rescan" would bring back every document the user had just dismissed.
 
 **Annotations never live next to the document**: the document sits in a git
 repository, and a sidecar file would show up in `git status` and end up
@@ -119,6 +125,38 @@ def _write_docs(docs: dict[str, dict[str, Any]]) -> None:
         raise RegistryError(f"cannot write {registry_path()}: {exc}") from exc
 
 
+def forgotten_path() -> Path:
+    return _root() / "forgotten.json"
+
+
+def _read_forgotten() -> dict[str, float]:
+    path = forgotten_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RegistryError(f"cannot read {path}: {exc}") from exc
+    table = data.get("forgotten") if isinstance(data, dict) else None
+    return {str(k): float(v) for k, v in (table or {}).items()
+            if isinstance(v, (int, float))}
+
+
+def _write_forgotten(table: dict[str, float]) -> None:
+    try:
+        atomic_write(forgotten_path(), json.dumps({"version": 1, "forgotten": table},
+                                                  indent=2, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise RegistryError(f"cannot write {forgotten_path()}: {exc}") from exc
+
+
+def dismissed(path: Path, mtime: float) -> bool:
+    """True if the user unmanaged `path` and it has not been written since."""
+    with locked():
+        recorded = _read_forgotten().get(str(path))
+    return recorded is not None and mtime <= recorded
+
+
 def doc_id_for(path: Path, taken: dict[str, dict[str, Any]] | None = None) -> str:
     """Short and stable: derived from the absolute path, so re-registering
     the same file finds the same id. Lengthened on the (unlikely) collision."""
@@ -219,6 +257,9 @@ def register(path: Path, session: str | None = None,
             entry["status"] = "new"
         docs[doc_id] = entry
         _write_docs(docs)
+        table = _read_forgotten()
+        if table.pop(str(path), None) is not None:
+            _write_forgotten(table)
         return dict(entry)
 
 
@@ -233,7 +274,8 @@ def update(doc_id: str, **fields: Any) -> dict[str, Any]:
 
 
 def forget(doc_id: str, delete_file: bool = False) -> dict[str, Any]:
-    """Remove the entry and its annotations; with `delete_file`, the file too."""
+    """Remove the entry and its annotations; with `delete_file`, the file too.
+    A file that stays is remembered with its date (see `dismissed`)."""
     with locked():
         docs = _read_docs()
         if doc_id not in docs:
@@ -241,6 +283,15 @@ def forget(doc_id: str, delete_file: bool = False) -> dict[str, Any]:
         entry = docs.pop(doc_id)
         _write_docs(docs)
         annotations_path(doc_id).unlink(missing_ok=True)
+        if not delete_file:
+            try:
+                mtime = Path(entry["path"]).stat().st_mtime
+            except OSError:
+                mtime = None
+            if mtime is not None:
+                table = _read_forgotten()
+                table[entry["path"]] = mtime
+                _write_forgotten(table)
     if delete_file:
         try:
             Path(entry["path"]).unlink(missing_ok=True)

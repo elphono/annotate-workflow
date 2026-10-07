@@ -35,7 +35,7 @@ def run_hook(tmp_path):
         if prints is not None:
             answer.write_text(prints)
         env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
-               "ANNOTATE_WORKSPACE": str(workspace), **(extra_env or {})}
+               **(extra_env or {})}
         data = payload if isinstance(payload, str) else json.dumps(payload)
         done = subprocess.run([sys.executable, str(HOOK)], input=data, text=True,
                               capture_output=True, env=env, timeout=30)
@@ -62,12 +62,26 @@ def test_an_html_doc_under_docs_is_registered_with_its_session(run_hook):
          "--hook"]]
 
 
-def test_other_files_are_ignored(run_hook):
+def test_only_html_files_reach_annotate(run_hook):
     run, ws = run_hook
     assert run(payload(ws / "proj" / "docs" / "notes.md")) == []
-    assert run(payload(ws / "proj" / "src" / "page.html")) == []      # no docs/
-    assert run(payload(ws / "proj" / "docs.html")) == []             # docs is the file
-    assert run(payload(Path("/tmp/elsewhere/docs/x.html"))) == []    # outside workspace
+    assert run(payload(ws / "proj" / "docs" / "x.htm")) == []
+
+
+def test_every_html_file_is_handed_over_and_annotate_decides(run_hook):
+    """The tracked folders change from the index page: the hook keeps no copy
+    of the rule (folders.wanted, asked by `register --hook`)."""
+    run, ws = run_hook
+    elsewhere = Path("/tmp/elsewhere/report.html")
+    assert run(payload(elsewhere)) == [
+        ["register", str(elsewhere), "--session", "sess-abc", "--cwd", "/somewhere/repo",
+         "--hook"]]
+
+
+def test_a_relative_path_is_taken_from_the_session_folder(run_hook):
+    run, ws = run_hook
+    assert run(payload(Path("docs/x.html"), cwd="/somewhere/repo"))[0][1] == \
+        "/somewhere/repo/docs/x.html"
 
 
 def test_the_context_annotate_prints_reaches_the_session(run_hook):

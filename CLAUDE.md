@@ -42,7 +42,7 @@ une session attend ? ── oui ─► `annotate wait` rend les notes et sort : 
 | Voie | Ce qu'elle voit | Ce qu'elle apporte |
 |---|---|---|
 | le hook (push) | les `Write` et `Edit` d'une session | la session à coup sûr, et la consigne `annotate wait` |
-| le parcours du démon (toutes les 30 s) | tout `.html` écrit sous un `docs/` **depuis son premier passage** | ce que Bash écrit (`cp` depuis un scratchpad, scripts, sous-agents) ; la session est retrouvée dans les transcripts |
+| le parcours du démon (toutes les 30 s) | tout document des dossiers suivis écrit **depuis son premier passage** | ce que Bash écrit (`cp` depuis un scratchpad, scripts, sous-agents) ; la session est retrouvée dans les transcripts |
 
 Mesuré le 2026-10-05 : un `docs/<nom>.html` d'un dépôt du workspace, composé par un
 sous-agent dans son scratchpad puis copié par `cp`, n'est jamais passé par le hook. **Rien
@@ -51,9 +51,23 @@ début du dernier passage, si bien qu'un fichier écrit démon arrêté est trou
 suivant, et qu'un document oublié ne revient que s'il est réécrit. `figures/` est exclu des deux
 voies : ce sont les sources HTML des images d'un document.
 
+**Les dossiers suivis se choisissent sur la page d'accueil** (décision du 2026-10-07, `folders.py`,
+`~/.local/share/annotate/folders.json`). Par défaut, un seul : les `docs/` du workspace. Un dossier
+ajouté — n'importe lequel sous `~` — suit **tout** `.html` en dessous, hors `build/`,
+`node_modules/`, `figures/`, `.claude/`… Mesuré ce jour-là : ce qui échappait était hors de la règle
+`docs/` (`~/.claude/sync/docs/`, un `rapports/` de dépôt), jamais un raté du parcours. **La règle ne
+vit qu'à un endroit** : le hook passe tout `.html` à `annotate register --hook`, qui demande
+`folders.wanted` ; il n'en garde aucune copie.
+
+**Le rattrapage est celui de l'utilisateur, et il est borné** : « Rescan » (page, pastille,
+`annotate rescan`) et l'ajout d'un dossier prennent les fichiers des N derniers jours (7 par défaut)
+— un rattrapage complet aurait ramené 100 documents d'un coup. Il ne ramène pas un document passé en
+« Unmanage » tant qu'il n'a pas été réécrit (`forgotten.json`, date du fichier au moment de
+l'oubli). Le passage régulier, lui, ne rattrape toujours rien.
+
 **La page d'accueil (`/`, ouverte d'un clic gauche sur la pastille) porte tous les contrôles
-de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; pour
-le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
+de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; les
+dossiers suivis (ajout avec suggestions, retrait) et Rescan ; pour le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
 démon n'a pas été lancé par systemd). **Start n'y est pas, et ne peut pas y être** : un démon
 arrêté ne sert plus de page où cliquer ; il reste dans la pastille. La page passe par la même
 API que la pastille, avec la même garde (`X-Annotate`, origine locale).
@@ -79,6 +93,8 @@ uv run python tools/mutate.py            # campagne de mutation dirigée, sur un
 uv run annotate register <chemin.html> [--session ID] [--cwd DIR]
 uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : rend les notes
 uv run annotate list | open <id> | send <id> | new-session <id> | forget <id> [--delete]
+uv run annotate folders [add|remove <dossier>]   # les dossiers suivis
+uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours
 uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
 uv run annotate tray [--start|--once|--uninstall]   # pastille Windows + raccourci Démarrage
@@ -87,8 +103,8 @@ uv run annotate status                   # le démon en une ligne
 
 Configuration : `~/.config/annotate/config.toml` (`port`, `claude_bin`), surchargeable par
 `ANNOTATE_PORT`, `ANNOTATE_CLAUDE` ; données sous
-`ANNOTATE_DATA_DIR` (défaut `~/.local/share/annotate`). Le hook lit `ANNOTATE_WORKSPACE`
-(défaut `~/workspace`).
+`ANNOTATE_DATA_DIR` (défaut `~/.local/share/annotate`). `ANNOTATE_WORKSPACE` (défaut
+`~/workspace`) donne le dossier suivi par défaut, tant que la liste n'a jamais été modifiée.
 
 ## Langue
 
@@ -130,7 +146,9 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | une annotation dont l'ancre ne résout plus n'est jamais perdue (barre « orphelines », prompt « Anchor: lost ») | `test_a_lost_anchor_is_still_sent_with_its_quote`, `test_browser.py` |
 | le parcours ne reprend rien d'antérieur à son premier passage, et ne perd rien démon arrêté | `test_nothing_older_than_the_first_pass_is_taken`, `test_the_daemon_being_down_loses_nothing` |
 | l'auteur d'un document est le DERNIER appel d'outil qui le nomme avant son écriture, sous-agent compris | `test_the_writer_is_the_last_call_naming_the_file_before_it_was_written` |
-| le hook et le parcours s'accordent sur ce qu'est un document | `test_the_hook_and_the_scan_agree_on_what_a_document_is` |
+| le hook n'enregistre qu'un document d'un dossier suivi, et la règle n'a qu'une copie | `test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder`, `test_every_html_file_is_handed_over_and_annotate_decides` |
+| un dossier ne se suit que sous `~` ; un dossier ajouté suit tout `.html`, le workspace garde sa règle `docs/` | `test_a_folder_outside_the_home_directory_or_not_absolute_is_refused`, `test_a_folder_the_user_adds_tracks_every_html_under_it` |
+| un rescan ne prend que les N derniers jours, un à la fois, et ne ramène pas un document oublié | `test_a_catch_up_takes_the_recent_window_only`, `test_one_catch_up_at_a_time_and_the_last_one_is_reported`, `test_an_unmanaged_document_stays_out_of_a_catch_up_until_written_again` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 

@@ -7,6 +7,8 @@
     annotate send <id>
     annotate new-session <id>
     annotate forget <id> [--delete]
+    annotate folders [add <folder> | remove <folder>]
+    annotate rescan [--days N] [--folder <folder>]
     annotate serve
     annotate service
     annotate tray [--uninstall] [--start] [--once]
@@ -24,7 +26,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from . import browser, client, config, prompt, registry, server, service, tray
+from . import (browser, client, config, folders, prompt, registry, scanner, server,
+               service, tray)
 
 log = logging.getLogger("annotate")
 
@@ -35,6 +38,10 @@ def _url(cfg: config.Config, doc_id: str) -> str:
 
 
 def cmd_register(args: argparse.Namespace, cfg: config.Config) -> int:
+    if args.hook and not folders.wanted(Path(args.path)):
+        # The hook hands over every .html a session writes: the rule of what
+        # is a document lives here, in folders.wanted, and nowhere else.
+        return 0
     entry = registry.register(Path(args.path), session=args.session,
                               cwd=Path(args.cwd) if args.cwd else None)
     if args.hook:
@@ -143,6 +150,30 @@ def cmd_forget(args: argparse.Namespace, cfg: config.Config) -> int:
     return 0
 
 
+def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
+    if args.action == "add":
+        entry = folders.add(args.folder)
+        print(f"tracked: {entry['path']} (every .html under it); "
+              f"`annotate rescan --folder {entry['path']}` takes its recent files")
+        return 0
+    if args.action == "remove":
+        print(f"no longer tracked: {folders.remove(args.folder)['path']}")
+        return 0
+    for item in folders.load():
+        rule = "only under a docs/ folder" if item["docs_only"] else "every .html"
+        missing = "" if Path(item["path"]).is_dir() else "  (missing)"
+        print(f"{item['path']}  {rule}{missing}")
+    return 0
+
+
+def cmd_rescan(args: argparse.Namespace, cfg: config.Config) -> int:
+    days = scanner.check_days(args.days)
+    only = str(folders.normalise(args.folder)) if args.folder else None
+    added = scanner.catch_up(days, only)
+    print(f"{len(added)} document(s) registered from the last {days:g} day(s)")
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace, cfg: config.Config) -> int:
     return server.serve(cfg)
 
@@ -229,6 +260,17 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--delete", action="store_true", help="also delete the file")
     p.set_defaults(run=cmd_forget)
 
+    p = sub.add_parser("folders", help="the folders whose HTML files are tracked")
+    p.add_argument("action", nargs="?", choices=("add", "remove"))
+    p.add_argument("folder", nargs="?")
+    p.set_defaults(run=cmd_folders)
+
+    p = sub.add_parser("rescan", help="register the documents written in the last days")
+    p.add_argument("--days", default=None,
+                   help=f"how far back, in days (default {scanner.DEFAULT_DAYS})")
+    p.add_argument("--folder", default=None, help="only this tracked folder")
+    p.set_defaults(run=cmd_rescan)
+
     sub.add_parser("serve", help="run the daemon").set_defaults(run=cmd_serve)
     sub.add_parser("service", help="write the systemd user unit").set_defaults(
         run=cmd_service)
@@ -247,11 +289,15 @@ def parser() -> argparse.ArgumentParser:
 
 ERRORS = (config.ConfigError, registry.RegistryError, client.ClientError,
           browser.OpenError, server.ServerError, service.ServiceError,
-          tray.TrayError, subprocess.SubprocessError)
+          tray.TrayError, scanner.ScanError, folders.FoldersError,
+          subprocess.SubprocessError)
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    top = parser()
+    args = top.parse_args(argv)
+    if args.command == "folders" and bool(args.action) != bool(args.folder):
+        top.error("folders add|remove needs a folder")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(levelname)s %(message)s", stream=sys.stderr)
     try:

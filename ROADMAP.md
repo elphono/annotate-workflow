@@ -8,6 +8,8 @@ items marked **(proposal)** are ideas, not commitments.
 
 - Hook on `Write|Edit` that registers a session's HTML documents with the session's id, and a daemon
   scan (every 30 s) for what Bash writes.
+- Tracked folders chosen from the home page (any folder under `~`, every `.html` under it), and a
+  rescan that catches up the files of the last N days without reviving unmanaged documents.
 - Annotation layer injected by the daemon: Alt+click pins a numbered note, anchored by CSS selector +
   quote + offset, so it survives corrections. An “orphans” bar keeps notes whose anchor disappeared.
 - Three delivery routes: the session that waits (`annotate wait`), the open session's inbox, a

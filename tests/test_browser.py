@@ -115,6 +115,9 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     charlie = registry.register(charlie_path, session="s-live")["id"]
     registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
                                           "note": "from the index page"}])
+    reports = tmp_path / "pick" / "reports"          # no docs/ on the way
+    reports.mkdir(parents=True)
+    (reports / "delta.html").write_text("<title>Delta</title><p>d</p>")
     asked: list[str] = []
     monkeypatch.setattr(server.service, "control", asked.append)
     cfg = config.load_config()
@@ -129,7 +132,8 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     out.mkdir(parents=True, exist_ok=True)
     try:
         done = subprocess.run([node, str(INDEX_SCRIPT), pw_dir, f"http://localhost:{srv.port}",
-                               str(out)], capture_output=True, text=True, timeout=120)
+                               str(out), str(reports.resolve())],
+                              capture_output=True, text=True, timeout=120)
     finally:
         srv.shutdown()
         srv.server_close()
@@ -138,6 +142,9 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     listener.join(5)
     assert "from the index page" in box["waiter"].prompt  # type: ignore[union-attr]
     assert opener.calls == []
-    assert set(registry.all_docs()) == {alpha}
+    from annotate import folders
+    delta = [i for i, d in registry.all_docs().items() if d["title"] == "Delta"]
+    assert set(registry.all_docs()) == {alpha, *delta} and len(delta) == 1
+    assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]
     assert bravo_path.exists() and not charlie_path.exists()
     assert bravo and charlie and asked == ["restart", "stop"]

@@ -5,6 +5,9 @@
  * Per document: Open, Send to session, New session, Unmanage, Delete file.
  * For the daemon: Restart and Stop. Start is the one control that cannot live
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
+ * For the tracked folders (decision of 2026-10-07): add one under the home
+ * directory, remove one, and "Rescan", which registers what was written in
+ * the last N days; adding a folder does the same for that folder.
  *
  * Everything goes through the same API as the tray, with the same guard:
  * every POST/DELETE carries `X-Annotate`, and this page's Origin is the
@@ -23,7 +26,14 @@
   const groupsBox = document.getElementById('groups');
   const daemonLine = document.getElementById('daemon');
   const messageBox = document.getElementById('message');
+  const folderList = document.getElementById('folder-list');
+  const folderInput = document.getElementById('folder-input');
+  const suggestions = document.getElementById('folder-suggest');
+  const daysSelect = document.getElementById('days');
+  const scanState = document.getElementById('scan-state');
   let busy = false;
+  let home = '';
+  let shownFolders = '';
 
   const make = (name, cls, text) => {
     const node = document.createElement(name);
@@ -37,8 +47,10 @@
     messageBox.className = error ? 'error' : '';
   }
 
-  async function call(method, path) {
-    const response = await fetch(path, { method, headers: HEADERS });
+  async function call(method, path, body) {
+    const init = { method, headers: HEADERS };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const response = await fetch(path, init);
     let data = null;
     try { data = await response.json(); } catch (err) { data = null; }
     if (!response.ok) throw new Error((data && data.error) || ('HTTP ' + response.status));
@@ -121,8 +133,8 @@
     groupsBox.textContent = '';
     if (!docs.size) {
       groupsBox.append(make('p', 'empty',
-        'No document yet. A session that writes an HTML file under a docs/ folder of the ' +
-        'workspace adds it here.'));
+        'No document yet. A session that writes an HTML file in a tracked folder adds it ' +
+        'here; "Rescan all folders" takes the files written recently.'));
       return;
     }
     for (const group of data.sessions || []) {
@@ -136,9 +148,55 @@
     }
   }
 
+  // `~/x` for the user, the absolute path for the daemon.
+  const tilde = (path) => (home && (path === home || path.startsWith(home + '/'))
+    ? '~' + path.slice(home.length) : path);
+
+  function renderFolders(data) {
+    home = data.home || home;
+    const scan = data.scan || {};
+    if (scan.running) {
+      scanState.textContent = 'Rescan running (' + scan.running.days + ' day(s)' +
+        (scan.running.folder ? ', ' + tilde(scan.running.folder) : '') + ')…';
+    } else if (scan.last) {
+      scanState.textContent = scan.last.error ? 'Last rescan failed: ' + scan.last.error
+        : 'Last rescan: ' + scan.last.added + ' document(s) added, ' +
+          new Date(scan.last.ended_at).toLocaleTimeString();
+    } else {
+      scanState.textContent = '';
+    }
+    // Rebuilt only when the list changes: a rebuild under the cursor would
+    // swap the Remove button being pressed.
+    const key = JSON.stringify(data.folders);
+    if (key === shownFolders) return;
+    shownFolders = key;
+    folderList.textContent = '';
+    if (!data.folders.length) {
+      folderList.append(make('p', 'meta', 'No folder tracked: nothing new will be listed.'));
+    }
+    for (const folder of data.folders) {
+      const row = make('div', 'tracked');
+      row.dataset.path = folder.path;
+      row.append(make('code', '', tilde(folder.path)),
+        make('span', 'badge', folder.docs_only ? 'only under a docs/ folder' : 'every .html'));
+      if (!folder.exists) row.append(make('span', 'badge missing', 'folder missing'));
+      row.append(button('Remove', '', 'Stop tracking this folder (its documents stay listed)',
+        async () => {
+          if (!confirm('Stop tracking this folder? Documents already listed stay.\n\n' +
+                       folder.path)) return '';
+          await call('DELETE', '/api/folders?path=' + encodeURIComponent(folder.path));
+          return 'No longer tracked: ' + tilde(folder.path);
+        }));
+      folderList.append(row);
+    }
+  }
+
   async function refresh() {
     try {
-      render(await call('GET', '/api/docs'));
+      const [docs, tracked] = await Promise.all([call('GET', '/api/docs'),
+                                                call('GET', '/api/folders')]);
+      render(docs);
+      renderFolders(tracked);
     } catch (err) {
       daemonLine.textContent = 'daemon unreachable (' + err.message + '): start it from the ' +
         'tray icon, Daemon > start';
@@ -155,6 +213,42 @@
     await call('POST', '/api/daemon/stop');
     return 'Stop asked to systemd. Start it again from the tray icon (Daemon > start).';
   }));
+
+  document.getElementById('add-folder').addEventListener('submit', (e) => {
+    e.preventDefault();
+    act(document.getElementById('add'), async () => {
+      const days = Number(daysSelect.value);
+      const answer = await call('POST', '/api/folders', { path: folderInput.value, days });
+      folderInput.value = '';
+      return 'Tracked: ' + tilde(answer.folder.path) + (answer.started
+        ? '. Its files of the last ' + days + ' day(s) are being registered.'
+        : '. A rescan was already running: rescan once it ends to take its recent files.');
+    });
+  });
+  document.getElementById('rescan').addEventListener('click', (e) => act(e.target, async () => {
+    const answer = await call('POST', '/api/scan', { days: Number(daysSelect.value) });
+    return answer.started ? 'Rescan started: files written in the last ' + answer.days +
+      ' day(s), in every tracked folder.' : 'A rescan is already running.';
+  }));
+
+  // Subfolders as the user types, written the way the user writes them.
+  let suggestTimer = 0;
+  folderInput.addEventListener('input', () => {
+    clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(async () => {
+      try {
+        const answer = await call('GET', '/api/folders/suggest?path=' +
+                                  encodeURIComponent(folderInput.value || '~/'));
+        const typedTilde = (folderInput.value || '~').startsWith('~');
+        suggestions.textContent = '';
+        for (const path of answer.folders) {
+          const option = document.createElement('option');
+          option.value = (typedTilde ? tilde(path) : path) + '/';
+          suggestions.append(option);
+        }
+      } catch (err) { /* suggestions are a convenience */ }
+    }, 150);
+  });
 
   // Refresh unless a click is being handled: re-rendering under the cursor
   // would swap the button being pressed.

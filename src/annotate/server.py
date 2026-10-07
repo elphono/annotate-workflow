@@ -15,6 +15,11 @@
     POST   /api/docs/<id>/open               open the document in the browser
     DELETE /api/docs/<id>[?delete=1]         forget it (and delete the file)
     POST   /api/daemon/<restart|stop>        ask systemd (see service.control)
+    GET    /api/folders                      the tracked folders, and the rescan state
+    POST   /api/folders  {path, days}        track a folder, catch up its recent files
+    DELETE /api/folders?path=<folder>        stop tracking it (its documents stay)
+    GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
+    POST   /api/scan     {days}              catch up every tracked folder (scanner)
 
 **Local only, and no open CORS.** The socket is bound to 127.0.0.1. Any web
 page in the user's browser can still fire a "simple" cross-site POST at
@@ -45,8 +50,8 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import (browser, claude, config, htmldoc, listeners, registry, scanner, sender,
-               service)
+from . import (browser, claude, config, folders, htmldoc, listeners, registry, scanner,
+               sender, service)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -92,6 +97,7 @@ class AnnotateServer(ThreadingHTTPServer):
         self.cfg = cfg
         self.sender = send
         self.wait_hold = WAIT_HOLD
+        self.catchups = scanner.CatchUps()
 
     @property
     def port(self) -> int:
@@ -170,6 +176,9 @@ class Handler(BaseHTTPRequestHandler):
             parts = [unquote(p) for p in split.path.split("/") if p]
             self._dispatch(method, parts, parse_qs(split.query), split.path)
         except Refused as exc:
+            # A refusal may leave the request body unread: on a kept-alive
+            # connection it would be parsed as the next request.
+            self.close_connection = True
             self._error(exc.status, str(exc))
         except registry.UnknownDocument as exc:
             self._error(HTTPStatus.NOT_FOUND, str(exc))
@@ -179,6 +188,8 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.CONFLICT, str(exc))
         except service.ServiceError as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
+        except (folders.FoldersError, scanner.ScanError) as exc:
+            self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except (registry.RegistryError, sender.SendError, browser.OpenError,
                 htmldoc.HtmlDocError, listeners.ListenerError) as exc:
             log.error("%s %s: %s", method, self.path, exc)
@@ -231,7 +242,43 @@ class Handler(BaseHTTPRequestHandler):
             raise Refused(HTTPStatus.NOT_FOUND, "not found")
         if parts[:2] == ["api", "docs"]:
             return self._api(method, parts[2:], query)
+        if parts[:2] == ["api", "folders"]:
+            return self._folders(method, parts[2:], query)
+        if parts == ["api", "scan"] and method == "POST":
+            body = self._body()
+            days = scanner.check_days(body.get("days") if isinstance(body, dict) else None)
+            started = self.server.catchups.start(days)
+            if started:
+                log.info("rescan of every folder (%g days) requested from the web page", days)
+            return self._json(HTTPStatus.ACCEPTED, {"started": started, "days": days})
         raise Refused(HTTPStatus.NOT_FOUND, "not found")
+
+    def _folders(self, method: str, rest: list[str], query: dict[str, list[str]]) -> None:
+        if rest == ["suggest"] and method == "GET":
+            return self._json(HTTPStatus.OK,
+                              folders.subfolders(query.get("path", [""])[0]))
+        if rest:
+            raise Refused(HTTPStatus.NOT_FOUND, "not found")
+        if method == "GET":
+            items = [{**i, "exists": Path(i["path"]).is_dir()} for i in folders.load()]
+            return self._json(HTTPStatus.OK, {
+                "folders": items, "home": str(folders.home()),
+                "default_days": scanner.DEFAULT_DAYS,
+                "scan": self.server.catchups.state()})
+        if method == "POST":
+            body = self._body()
+            body = body if isinstance(body, dict) else {}
+            days = scanner.check_days(body.get("days"))
+            entry = folders.add(str(body.get("path") or ""))
+            started = self.server.catchups.start(days, only=entry["path"])
+            log.info("folder %s tracked from the web page", entry["path"])
+            return self._json(HTTPStatus.CREATED, {"folder": entry, "started": started,
+                                                   "days": days})
+        if method == "DELETE":
+            entry = folders.remove(query.get("path", [""])[0])
+            log.info("folder %s no longer tracked", entry["path"])
+            return self._json(HTTPStatus.OK, {"removed": entry})
+        raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
 
     def _document(self, entry: dict[str, Any], path: Path) -> None:
         try:
@@ -350,8 +397,8 @@ def serve(cfg: Config) -> int:
     worker = threading.Thread(target=srv.serve_forever, name="http", daemon=True)
     worker.start()
     scan_stop = threading.Event()
-    threading.Thread(target=scanner.run, args=(config.workspace(), scan_stop),
-                     name="scan", daemon=True).start()
+    threading.Thread(target=scanner.run, args=(scan_stop,), name="scan",
+                     daemon=True).start()
     log.info("annotate daemon listening on %s", srv.base_url())
     while not _Stop.requested:
         time.sleep(0.2)

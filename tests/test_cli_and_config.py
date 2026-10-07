@@ -166,3 +166,40 @@ def test_open_prefers_wslview_then_cmd_then_explorer(monkeypatch):
     monkeypatch.setattr(browser.shutil, "which", lambda name: None)
     with pytest.raises(browser.OpenError):
         browser.open_url("http://x")
+
+
+def test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder(tmp_path, capsys):
+    """The hook hands over every .html; `register --hook` applies the rule."""
+    from annotate import folders
+    ws = tmp_path / "workspace"
+    inside = ws / "repo" / "docs" / "a.html"
+    outside = ws / "repo" / "src" / "b.html"
+    for path in (inside, outside):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("<title>x</title>")
+    assert cli.main(["register", str(outside), "--hook"]) == 0
+    assert capsys.readouterr().out == "" and registry.all_docs() == {}
+    assert cli.main(["register", str(inside), "--hook"]) == 0
+    assert [d["path"] for d in registry.all_docs().values()] == [str(inside)]
+    folders.add(str(ws))                                   # now: every .html under it
+    assert cli.main(["register", str(outside), "--hook"]) == 0
+    assert len(registry.all_docs()) == 2
+    assert cli.main(["register", str(outside)]) == 0      # by hand: always
+
+
+def test_folders_and_rescan_from_the_command_line(tmp_path, capsys):
+    import os
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "r.html").write_text("<title>R</title>")
+    assert cli.main(["folders", "add", str(reports)]) == 0
+    assert cli.main(["folders"]) == 0
+    listed = capsys.readouterr().out
+    assert f"{reports.resolve()}  every .html" in listed and "only under a docs/" in listed
+    assert cli.main(["rescan", "--folder", str(reports), "--days", "1"]) == 0
+    assert "1 document(s)" in capsys.readouterr().out
+    os.utime(reports / "r.html", (1000.0, 1000.0))
+    assert cli.main(["folders", "remove", str(reports.resolve())]) == 0
+    assert cli.main(["folders", "remove", str(reports.resolve())]) == 1
+    assert cli.main(["rescan", "--days", "0"]) == 1
+    assert "not a tracked folder" in capsys.readouterr().err

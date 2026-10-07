@@ -327,6 +327,14 @@ function Build-Menu {
         }
     }
     [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+    # The folders themselves are chosen on the index page (left click): the
+    # icon only offers the rescan, with the page's default window.
+    [void](Add-Item $menu 'Rescan folders (last 7 days)' {
+            $r = Invoke-Api -Method 'POST' -Path '/api/scan'
+            if (-not $r.Ok) { Show-Failure 'annotate: rescan failed' $r.Error }
+            elseif ($r.Data.started) { Show-Done 'Rescan started: new documents appear in the menu within a minute.' }
+            else { Show-Done 'A rescan is already running.' }
+        })
     $daemon = New-Object System.Windows.Forms.ToolStripMenuItem 'Daemon'
     foreach ($verb in @('start', 'stop', 'restart')) {
         $item = New-Object System.Windows.Forms.ToolStripMenuItem $verb

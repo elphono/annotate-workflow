@@ -45,6 +45,15 @@
   button.danger { color: var(--danger); border-color: var(--danger); }
   button:disabled { opacity: .5; cursor: progress; }
   .empty { color: var(--muted); margin-top: 24px; }
+  #folders .body { padding: 10px 14px; display: grid; gap: 10px; }
+  .tracked { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .tracked code { font: 13px ui-monospace, monospace; overflow-wrap: anywhere; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  input, select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
+                  border: 1px solid var(--line); background: var(--page); color: var(--ink); }
+  #folder-input { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, monospace; }
+  #scan-state { font-size: 13px; color: var(--muted); }
+  .row label { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -58,6 +67,25 @@
     </span>
   </header>
   <div id="message" role="status"></div>
+  <section id="folders">
+    <h2>Tracked folders <span class="folder">· a session's HTML file under one of them is listed here</span></h2>
+    <div class="body">
+      <div id="folder-list"></div>
+      <form id="add-folder" class="row">
+        <input id="folder-input" list="folder-suggest" placeholder="~/folder/to/track"
+               autocomplete="off" spellcheck="false" aria-label="Folder to track">
+        <datalist id="folder-suggest"></datalist>
+        <button type="submit" id="add">Add folder</button>
+      </form>
+      <div class="row">
+        <button id="rescan" title="Register the HTML files of every tracked folder written recently">Rescan all folders</button>
+        <label>files written in the last
+          <select id="days"><option>1</option><option selected>7</option><option>30</option><option>90</option></select>
+          day(s)</label>
+        <span id="scan-state"></span>
+      </div>
+    </div>
+  </section>
   <div id="groups"></div>
 </main>
 <script src="/static/index.js"></script>
