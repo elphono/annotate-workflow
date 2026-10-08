@@ -15,6 +15,8 @@ items marked **(proposal)** are ideas, not commitments.
 - Three delivery routes: the session that waits (`annotate wait`), the open session's inbox, a
   Windows Terminal tab that resumes the session. Never a background session.
 - Home page and Windows tray icon, with per-document and per-daemon controls.
+- Attach a document to any resumable conversation of the machine from the home page (open sessions
+  first, filter as you type), or detach it; `annotate sessions` / `attach` / `detach` do the same.
 - Local-only HTTP API, hardened against pages that merely target `localhost`.
 - Test suite with guards that keep it from touching the real system, mutation harness, `ruff` and
   `mypy` clean, no runtime dependency.

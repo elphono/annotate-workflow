@@ -3,91 +3,326 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>annotate</title>
+<title>docpin</title>
 <style>
+  /* Everything is inline and local: the daemon must work offline. Colour
+     carries a distinction, never decoration: orange = notes waiting to be
+     sent (and the action that sends them), green = a session that is open or
+     listens, blue = notes delivered, red = an error or a missing file. */
   :root {
-    --accent: #ea580c; --accent-ink: #fff; --paper: #ffffff; --page: #f6f7f9;
-    --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb; --danger: #b91c1c;
-    --live: #15803d; --live-soft: #dcfce7;
+    color-scheme: light dark;
+    --page: #f3f4f6; --paper: #ffffff; --raised: #f9fafb; --sunken: #eef0f3;
+    --ink: #111827; --muted: #4b5563; --faint: #6b7280;
+    --line: #e5e7eb; --line-strong: #d1d5db;
+    --accent: #c2410c; --accent-hover: #9a3412; --accent-ink: #ffffff;
+    --accent-text: #b4400b; --accent-soft: #fff1e6;
+    --live: #15803d; --live-text: #166534; --live-soft: #e3f5e9;
+    --info: #1d4ed8; --info-soft: #e6eefe;
+    --danger: #b42318; --danger-soft: #fdecea;
+    --focus: #2563eb;
+    --shadow: 0 1px 2px rgba(17, 24, 39, .05), 0 1px 3px rgba(17, 24, 39, .06);
+    --shadow-pop: 0 12px 32px rgba(17, 24, 39, .18), 0 2px 6px rgba(17, 24, 39, .08);
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --paper: #1f2430; --page: #161a22; --ink: #e5e7eb; --muted: #9ca3af;
-            --line: #374151; --live: #4ade80; --live-soft: #14532d; --danger: #f87171; }
+    :root {
+      --page: #0d1015; --paper: #161a21; --raised: #1b2029; --sunken: #11151b;
+      --ink: #e7eaf0; --muted: #a3acb9; --faint: #7d8796;
+      --line: #262c36; --line-strong: #343c48;
+      --accent: #c2410c; --accent-hover: #dc5a1c; --accent-ink: #ffffff;
+      --accent-text: #fdba74; --accent-soft: rgba(251, 146, 60, .13);
+      --live: #22c55e; --live-text: #86efac; --live-soft: rgba(74, 222, 128, .12);
+      --info: #93b4ff; --info-soft: rgba(96, 165, 250, .14);
+      --danger: #fca5a5; --danger-soft: rgba(248, 113, 113, .14);
+      --focus: #7aa2ff;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+      --shadow-pop: 0 16px 40px rgba(0, 0, 0, .55);
+    }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--page); color: var(--ink);
-         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
-  h1 { margin: 0; font-size: 22px; }
-  #daemon { color: var(--muted); font-size: 13px; flex: 1 1 200px; }
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: inherit; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .mono.id { white-space: nowrap; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* -- top bar ------------------------------------------------------------ */
+  .topbar { position: sticky; top: 0; z-index: 20; background: var(--paper);
+            border-bottom: 1px solid var(--line); }
+  .topbar-inner { max-width: 1180px; margin: 0 auto; padding: 10px 16px;
+                  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .brand { display: flex; align-items: center; gap: 8px; margin: 0;
+           font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  .brand svg { width: 20px; height: 20px; color: var(--ink); }
+  #daemon { display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+            font-size: 13px; color: var(--muted); flex: 1 1 220px; }
+  #daemon .dot { width: 8px; height: 8px; border-radius: 50%; flex: none;
+                 background: var(--faint); }
+  #daemon.up .dot { background: var(--live); box-shadow: 0 0 0 3px var(--live-soft); }
+  #daemon.down { color: var(--danger); }
+  #daemon.down .dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
   .daemon-actions { display: flex; gap: 6px; }
-  #message { min-height: 22px; margin: 12px 0 4px; font-size: 14px; color: var(--accent); }
-  #message.error { color: var(--danger); }
-  section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
-            margin-top: 16px; overflow: hidden; }
-  section h2 { margin: 0; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--line); }
-  section h2 .folder { color: var(--muted); font-weight: 400; }
-  .doc { padding: 10px 14px; border-top: 1px solid var(--line); }
-  .doc:first-of-type { border-top: 0; }
-  .doc .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .doc a.title { font-weight: 600; color: var(--ink); text-decoration: none; }
-  .doc a.title:hover { text-decoration: underline; }
-  .meta { color: var(--muted); font-size: 13px; }
-  .badge { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--ink); }
-  .badge.live { background: var(--live-soft); color: var(--live); }
-  .badge.missing { background: var(--danger); color: #fff; }
-  .path { color: var(--muted); font: 12px ui-monospace, monospace; overflow-wrap: anywhere; margin-top: 2px; }
-  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
-           border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+
+  /* -- buttons and fields ------------------------------------------------- */
+  button { font: inherit; font-size: 13px; font-weight: 500; line-height: 1.2;
+           padding: 7px 12px; border-radius: 8px; cursor: pointer;
+           border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink);
+           white-space: nowrap; }
+  button:hover { background: var(--raised); border-color: var(--faint); }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  button.danger { color: var(--danger); border-color: var(--danger); }
-  button:disabled { opacity: .5; cursor: progress; }
-  .empty { color: var(--muted); margin-top: 24px; }
-  #folders .body { padding: 10px 14px; display: grid; gap: 10px; }
-  .tracked { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-  .tracked code { font: 13px ui-monospace, monospace; overflow-wrap: anywhere; }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-  input, select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
-                  border: 1px solid var(--line); background: var(--page); color: var(--ink); }
-  #folder-input { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, monospace; }
-  #scan-state { font-size: 13px; color: var(--muted); }
-  .row label { font-size: 13px; }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  button.ghost:hover { background: var(--sunken); color: var(--ink); }
+  button.danger { color: var(--danger); }
+  button.ghost.danger:hover { background: var(--danger-soft); color: var(--danger); }
+  button:disabled { opacity: .55; cursor: progress; }
+  input, select { font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px;
+                  border: 1px solid var(--line-strong); background: var(--paper); color: var(--ink);
+                  min-width: 0; }
+  input::placeholder { color: var(--faint); }
+
+  /* -- layout ------------------------------------------------------------- */
+  .layout { max-width: 1180px; margin: 0 auto; padding: 20px 16px 120px;
+            display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 980px) {
+    .layout { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+    .side { position: sticky; top: 76px; }
+  }
+  .content, .side { min-width: 0; display: grid; gap: 16px; align-content: start; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); min-width: 0; }
+
+  /* -- overview and toolbar ----------------------------------------------- */
+  #overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stat { padding: 12px 16px; border-left: 1px solid var(--line); min-width: 0; }
+  .stat:first-child { border-left: 0; }
+  .stat .value { display: block; font-size: 24px; font-weight: 700; line-height: 1.1;
+                 font-variant-numeric: tabular-nums; }
+  .stat .label { display: block; font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 479px) {
+    .stat { padding: 10px 12px; }
+    .stat .value { font-size: 20px; }
+    .stat .label { font-size: 12px; }
+  }
+  .stat.accent .value { color: var(--accent-text); }
+  .stat.live .value { color: var(--live-text); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #filter { flex: 1 1 220px; }
+  .segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px;
+               background: var(--sunken); border: 1px solid var(--line); }
+  .segmented button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; }
+  .segmented button[aria-pressed="true"] { background: var(--paper); color: var(--ink);
+                                           box-shadow: var(--shadow); }
+
+  /* -- session groups ----------------------------------------------------- */
+  #groups { display: grid; gap: 16px; }
+  .group { overflow: visible; }
+  .group-head { padding: 12px 16px 10px; border-bottom: 1px solid var(--line);
+                display: grid; gap: 2px; }
+  .group-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .group h2 { margin: 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+  .group h2::first-letter { text-transform: uppercase; }
+  .group-meta { font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
+  .group.unknown .group-head { background: var(--raised); border-radius: var(--radius) var(--radius) 0 0; }
+
+  /* -- documents ---------------------------------------------------------- */
+  .doc { position: relative; padding: 12px 16px 12px 19px; border-top: 1px solid var(--line);
+         display: grid; gap: 8px 16px; grid-template-columns: minmax(0, 1fr); }
+  .group-head + .doc { border-top: 0; }
+  .doc::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+                 background: transparent; }
+  .doc:last-child::before { border-bottom-left-radius: var(--radius); }
+  .doc.pending::before { background: var(--accent); }
+  .doc.delivered::before { background: var(--info); }
+  .doc.missing::before { background: var(--danger); }
+  @media (min-width: 720px) {
+    .doc { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  }
+  .doc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+  .doc a.title { font-weight: 600; font-size: 15px; text-decoration: none; overflow-wrap: anywhere; }
+  .doc a.title:hover { text-decoration: underline; }
+  .doc .meta { font-size: 12.5px; color: var(--faint); margin-top: 2px; overflow-wrap: anywhere; }
+  .doc .meta .mono { color: var(--muted); }
+  .doc .problem { font-size: 12.5px; color: var(--danger); margin-top: 4px; overflow-wrap: anywhere; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500;
+           line-height: 1.6; padding: 0 8px; border-radius: 999px; white-space: nowrap;
+           background: var(--sunken); color: var(--muted); }
+  .badge.accent { background: var(--accent-soft); color: var(--accent-text); }
+  .badge.live { background: var(--live-soft); color: var(--live-text); }
+  .badge.live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+  .badge.info { background: var(--info-soft); color: var(--info); }
+  .badge.danger { background: var(--danger-soft); color: var(--danger); }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .actions .more { margin-left: auto; }
+  @media (min-width: 720px) { .actions { justify-content: flex-end; flex-wrap: nowrap; } }
+
+  /* -- the More menu ------------------------------------------------------ */
+  details.more { position: relative; }
+  details.more > summary { list-style: none; cursor: pointer; font-size: 13px; font-weight: 500;
+                           padding: 7px 10px; border-radius: 8px; color: var(--muted);
+                           border: 1px solid transparent; user-select: none; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary::after { content: " \25BE"; }
+  details.more > summary:hover, details.more[open] > summary { background: var(--sunken); color: var(--ink); }
+  .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 210px;
+          padding: 6px; display: grid; gap: 2px; background: var(--paper);
+          border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-pop); }
+  .menu button { text-align: left; border: 0; background: transparent; padding: 8px 10px; }
+  .menu button:hover { background: var(--sunken); }
+  .menu button.danger:hover { background: var(--danger-soft); }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+
+  /* -- empty states ------------------------------------------------------- */
+  .empty { padding: 28px 20px; text-align: center; color: var(--muted); }
+  .empty h2 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+  .empty ol { display: inline-grid; gap: 4px; margin: 10px 0 0; padding-left: 20px;
+              text-align: left; font-size: 14px; }
+  .empty kbd { font: 12px var(--mono); padding: 1px 5px; border-radius: 5px;
+               border: 1px solid var(--line-strong); background: var(--raised); }
+
+  /* -- tracked folders ---------------------------------------------------- */
+  .side h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .side .card-head { padding: 12px 16px 0; }
+  .side .card-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--faint); }
+  #folders .body { padding: 10px 16px 14px; display: grid; gap: 12px; }
+  #folder-list { display: grid; gap: 6px; }
+  .tracked { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px;
+             align-items: center; padding: 8px 6px 8px 10px; border-radius: 8px; background: var(--raised);
+             border: 1px solid var(--line); }
+  .tracked code { font: 12.5px var(--mono); overflow-wrap: anywhere; }
+  .tracked .rule { grid-column: 1; font-size: 12px; color: var(--faint); }
+  .tracked .rule .badge { margin-left: 4px; }
+  .tracked button { grid-column: 2; grid-row: 1 / span 2; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  #folder-input { flex: 1 1 180px; font-family: var(--mono); font-size: 13px; }
+  .row label { font-size: 13px; color: var(--muted); }
+  #days { padding: 5px 6px; font-size: 13px; }
+  #scan-state { font-size: 12.5px; color: var(--faint); }
+  #scan-state.error { color: var(--danger); }
+
+  /* -- toast -------------------------------------------------------------- */
+  .toast { position: fixed; z-index: 40; left: 50%; bottom: 20px; transform: translate(-50%, 12px);
+           width: max-content; max-width: calc(100vw - 32px); display: flex; align-items: flex-start;
+           gap: 10px; padding: 10px 10px 10px 14px; border-radius: 10px; font-size: 14px;
+           background: var(--ink); color: var(--paper); box-shadow: var(--shadow-pop);
+           opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .toast.error { background: var(--paper); color: var(--danger); border: 1px solid var(--danger); }
+  #message { overflow-wrap: anywhere; padding-top: 2px; }
+  .toast button { padding: 2px 8px; border: 0; background: transparent; color: inherit;
+                  font-size: 16px; line-height: 1; opacity: .7; }
+  .toast button:hover { opacity: 1; background: transparent; }
+
+  /* -- the session picker ------------------------------------------------- */
+  dialog#picker { width: min(640px, calc(100vw - 32px)); max-height: min(680px, calc(100vh - 48px));
+                  padding: 0; border: 1px solid var(--line); border-radius: 14px;
+                  background: var(--paper); color: var(--ink); box-shadow: var(--shadow-pop); }
+  dialog#picker[open] { display: flex; flex-direction: column; }
+  dialog#picker::backdrop { background: rgba(9, 12, 17, .45); }
+  .picker-head { padding: 16px 16px 10px; display: grid; gap: 2px; border-bottom: 1px solid var(--line); }
+  .picker-head h2 { margin: 0; font-size: 16px; }
+  .picker-head p { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .picker-search { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  #picker-search { width: 100%; }
+  #picker-list { overflow-y: auto; padding: 6px; display: grid; gap: 2px; align-content: start;
+                 min-height: 120px; }
+  .option { display: grid; gap: 2px; width: 100%; text-align: left; white-space: normal;
+            border: 1px solid transparent; background: transparent; padding: 9px 10px; border-radius: 8px; }
+  .option:hover { background: var(--raised); border-color: transparent; }
+  .option.active { background: var(--sunken); border-color: var(--line-strong); }
+  .option .line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+  .option .name { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+  .option .name.untitled { color: var(--muted); font-weight: 500; }
+  .option .sub { font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
+  .picker-empty { margin: 0; padding: 24px 12px; text-align: center; color: var(--muted); font-size: 14px; }
+  .picker-foot { padding: 10px 16px; border-top: 1px solid var(--line); display: flex;
+                 flex-wrap: wrap; align-items: center; gap: 8px; }
+  .picker-foot .hint { flex: 1 1 200px; font-size: 12.5px; color: var(--faint); }
+  .picker-foot .hint.problem { color: var(--danger); }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>annotate</h1>
-    <span id="daemon">…</span>
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1 class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 17v5"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/>
+      </svg>docpin</h1>
+    <span id="daemon"><span class="dot"></span><span class="text">Connecting to the daemon…</span></span>
     <span class="daemon-actions">
-      <button id="restart" title="systemctl --user restart annotate">Restart daemon</button>
-      <button id="stop" class="danger" title="systemctl --user stop annotate">Stop daemon</button>
+      <button id="restart" class="ghost" title="systemctl --user restart annotate">Restart daemon</button>
+      <button id="stop" class="ghost danger" title="systemctl --user stop annotate">Stop daemon</button>
     </span>
-  </header>
-  <div id="message" role="status"></div>
-  <section id="folders">
-    <h2>Tracked folders <span class="folder">· a session's HTML file under one of them is listed here</span></h2>
-    <div class="body">
-      <div id="folder-list"></div>
-      <form id="add-folder" class="row">
-        <input id="folder-input" list="folder-suggest" placeholder="~/folder/to/track"
-               autocomplete="off" spellcheck="false" aria-label="Folder to track">
-        <datalist id="folder-suggest"></datalist>
-        <button type="submit" id="add">Add folder</button>
-      </form>
-      <div class="row">
-        <button id="rescan" title="Register the HTML files of every tracked folder written recently">Rescan all folders</button>
-        <label>files written in the last
-          <select id="days"><option>1</option><option selected>7</option><option>30</option><option>90</option></select>
-          day(s)</label>
-        <span id="scan-state"></span>
-      </div>
+  </div>
+</header>
+<main class="layout">
+  <div class="content">
+    <div id="overview" class="card" aria-label="Overview">
+      <div class="stat" id="stat-docs"><span class="value">–</span><span class="label">documents</span></div>
+      <div class="stat" id="stat-pending"><span class="value">–</span><span class="label">notes to send</span></div>
+      <div class="stat" id="stat-open"><span class="value">–</span><span class="label">sessions open</span></div>
     </div>
-  </section>
-  <div id="groups"></div>
+    <div class="toolbar">
+      <input id="filter" type="search" placeholder="Filter by title, file or session"
+             autocomplete="off" spellcheck="false" aria-label="Filter documents">
+      <span class="segmented" role="group" aria-label="Show">
+        <button type="button" id="show-all" aria-pressed="true">All</button>
+        <button type="button" id="show-pending" aria-pressed="false">Notes to send</button>
+      </span>
+    </div>
+    <div id="groups"></div>
+  </div>
+  <aside class="side">
+    <section id="folders" class="card">
+      <div class="card-head">
+        <h2>Tracked folders</h2>
+        <p>An HTML file a session writes under one of them is listed here.</p>
+      </div>
+      <div class="body">
+        <div id="folder-list"></div>
+        <form id="add-folder" class="row">
+          <input id="folder-input" list="folder-suggest" placeholder="~/folder/to/track"
+                 autocomplete="off" spellcheck="false" aria-label="Folder to track">
+          <datalist id="folder-suggest"></datalist>
+          <button type="submit" id="add">Add folder</button>
+        </form>
+        <div class="row">
+          <button id="rescan" title="Register the HTML files of every tracked folder written recently">Rescan all folders</button>
+          <label>last
+            <select id="days"><option>1</option><option selected>7</option><option>30</option><option>90</option></select>
+            day(s)</label>
+        </div>
+        <div id="scan-state"></div>
+      </div>
+    </section>
+  </aside>
 </main>
+<div class="toast" id="toast">
+  <span id="message" role="status" aria-live="polite"></span>
+  <button type="button" id="toast-close" aria-label="Dismiss">&times;</button>
+</div>
+<dialog id="picker" aria-labelledby="picker-title">
+  <div class="picker-head">
+    <h2 id="picker-title">Attach to a session</h2>
+    <p id="picker-doc"></p>
+  </div>
+  <div class="picker-search">
+    <input id="picker-search" type="search" placeholder="Filter by title, folder or id"
+           autocomplete="off" spellcheck="false" aria-label="Filter the sessions"
+           aria-controls="picker-list">
+  </div>
+  <div id="picker-list" role="listbox" aria-label="Sessions"></div>
+  <div class="picker-foot">
+    <span class="hint" id="picker-hint">&uarr; &darr; to move, Enter to attach, Esc to close</span>
+    <button type="button" id="picker-detach" class="ghost danger">Detach</button>
+    <button type="button" id="picker-cancel">Cancel</button>
+  </div>
+</dialog>
 <script src="/static/index.js"></script>
 </body>
 </html>

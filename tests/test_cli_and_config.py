@@ -187,6 +187,33 @@ def test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder(tmp_pat
     assert cli.main(["register", str(outside)]) == 0      # by hand: always
 
 
+def test_sessions_attach_and_detach_from_the_command_line(make_doc, capsys, tmp_path):
+    """Every control of the page has its command (2026-10-08)."""
+    from annotate import claude
+    from fakes import conversation, register_session
+    conversation(claude.projects_dir(), "s-cli", cwd=str(tmp_path), title="CLI session",
+                 when=2000.0)
+    conversation(claude.projects_dir(), "s-quiet", cwd="/elsewhere", when=1000.0)
+    inbox_socket = tmp_path / "s.sock"
+    inbox_socket.write_text("")
+    register_session("s-cli", inbox_socket)
+    doc = registry.register(make_doc("<p>x</p>"), session="")["id"]
+    assert cli.main(["sessions"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 2 and lines[0].startswith("s-cli  open  ")
+    assert lines[0].endswith(f"CLI session  {tmp_path}")
+    assert lines[1].startswith("s-quiet        ") and "(untitled)  /elsewhere" in lines[1]
+    assert cli.main(["attach", doc, "s-cli"]) == 0
+    assert f"attached to s-cli (CLI session), folder {tmp_path}" in capsys.readouterr().out
+    assert registry.get(doc)["session_id"] == "s-cli"
+    assert cli.main(["attach", doc, "nope-1234"]) == 1
+    assert "no conversation nope-1234 on this machine" in capsys.readouterr().err
+    assert registry.get(doc)["session_id"] == "s-cli"
+    assert cli.main(["detach", doc]) == 0
+    assert registry.get(doc)["session_id"] == ""
+    assert "detached" in capsys.readouterr().out
+
+
 def test_folders_and_rescan_from_the_command_line(tmp_path, capsys):
     import os
     reports = tmp_path / "reports"

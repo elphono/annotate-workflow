@@ -59,16 +59,16 @@ def _proc_start(pid: int) -> str | None:
     return fields[19] if len(fields) > 19 else None
 
 
-def open_sessions(session_id: str) -> list[dict[str, Any]]:
-    """The live processes of `session_id` that have an inbox, most recently
-    active first (a conversation can be open twice: the duplicate tab)."""
+def _live_entries() -> list[dict[str, Any]]:
+    """Every entry of the sessions registry whose process is alive and has an
+    inbox: the one place that decides what "open" means."""
     found = []
     for path in sessions_dir().glob("*.json"):
         try:
             entry = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if not isinstance(entry, dict) or entry.get("sessionId") != session_id:
+        if not isinstance(entry, dict) or not isinstance(entry.get("sessionId"), str):
             continue
         pid, socket_path = entry.get("pid"), entry.get("messagingSocketPath")
         if not isinstance(pid, int) or pid <= 1 or not isinstance(socket_path, str):
@@ -78,7 +78,20 @@ def open_sessions(session_id: str) -> list[dict[str, Any]]:
         if not Path(socket_path).exists():
             continue
         found.append(entry)
+    return found
+
+
+def open_sessions(session_id: str) -> list[dict[str, Any]]:
+    """The live processes of `session_id` that have an inbox, most recently
+    active first (a conversation can be open twice: the duplicate tab)."""
+    found = [e for e in _live_entries() if e["sessionId"] == session_id]
     return sorted(found, key=lambda e: e.get("updatedAt") or 0, reverse=True)
+
+
+def open_session_ids() -> set[str]:
+    """The sessions that are open right now, by the same test as
+    `open_sessions`: open on the index page means a send would post into it."""
+    return {e["sessionId"] for e in _live_entries()}
 
 
 def line(text: str) -> bytes:

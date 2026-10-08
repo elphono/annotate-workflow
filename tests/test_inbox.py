@@ -6,7 +6,6 @@ an isolated `~/.claude/sessions` (conftest): never one of the user's sessions.
 from __future__ import annotations
 
 import json
-import os
 import socket
 import threading
 from pathlib import Path
@@ -15,7 +14,7 @@ import pytest
 
 from annotate import inbox, registry, sender
 from annotate.config import Config
-from fakes import RecordingOpener
+from fakes import RecordingOpener, register_session
 
 
 class Inbox:
@@ -52,18 +51,6 @@ class Inbox:
         self._srv.close()
 
 
-def register_session(session_id: str, socket_path: Path, *, pid: int | None = None,
-                     proc_start: str | None = None, name: str = "session-c1",
-                     updated: int = 1) -> None:
-    pid = os.getpid() if pid is None else pid
-    start = inbox._proc_start(os.getpid()) if proc_start is None else proc_start
-    inbox.sessions_dir().mkdir(parents=True, exist_ok=True)
-    (inbox.sessions_dir() / f"{pid}-{name}.json").write_text(json.dumps({
-        "pid": pid, "sessionId": session_id, "procStart": start, "name": name,
-        "messagingSocketPath": str(socket_path), "kind": "interactive",
-        "updatedAt": updated}))
-
-
 @pytest.fixture
 def box(tmp_path):
     receiver = Inbox(tmp_path / "s.sock")
@@ -89,6 +76,19 @@ def test_only_a_live_process_of_that_session_counts(box, tmp_path):
     register_session("s-1", tmp_path / "no.sock", name="no-socket")
     register_session("s-2", box.path, name="other-session")
     assert [e["name"] for e in inbox.open_sessions("s-1")] == ["live"]
+
+
+def test_the_open_session_ids_pass_the_same_test_as_a_send(box, tmp_path):
+    """What the index page calls "open" is what the sender would post into."""
+    register_session("s-1", box.path, name="live")
+    register_session("s-2", box.path, pid=2 ** 22 + 7, name="dead")          # no such pid
+    register_session("s-3", box.path, proc_start="1", name="reused")         # pid reused
+    register_session("s-4", tmp_path / "no.sock", name="no-socket")
+    register_session("s-5", box.path, name="also-live")
+    (inbox.sessions_dir() / "garbage.json").write_text("{not json")
+    assert inbox.open_session_ids() == {"s-1", "s-5"}
+    for session in ("s-1", "s-2", "s-3", "s-4", "s-5"):
+        assert bool(inbox.open_sessions(session)) == (session in {"s-1", "s-5"})
 
 
 def test_an_open_session_that_does_not_listen_gets_the_notes_in_its_inbox(box, make_doc):

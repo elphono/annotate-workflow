@@ -7,6 +7,9 @@
     annotate send <id>
     annotate new-session <id>
     annotate forget <id> [--delete]
+    annotate sessions
+    annotate attach <id> <session> [--cwd DIR]
+    annotate detach <id>
     annotate folders [add <folder> | remove <folder>]
     annotate rescan [--days N] [--folder <folder>]
     annotate serve
@@ -24,10 +27,11 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
-from . import (browser, client, config, folders, prompt, registry, scanner, server,
-               service, tray)
+from . import (browser, claude, client, config, folders, prompt, registry, scanner,
+               server, service, tray)
 
 log = logging.getLogger("annotate")
 
@@ -150,6 +154,37 @@ def cmd_forget(args: argparse.Namespace, cfg: config.Config) -> int:
     return 0
 
 
+def cmd_sessions(args: argparse.Namespace, cfg: config.Config) -> int:
+    """The conversations a document can be attached to, as the index page
+    offers them: open ones first, then the most recently active."""
+    items = claude.sessions()
+    if not items:
+        print("no conversation of this machine can be resumed")
+        return 0
+    for item in items:
+        when = datetime.fromtimestamp(item["last_active"]).strftime("%Y-%m-%d %H:%M")
+        print(f"{item['id']}  {'open' if item['open'] else '    '}  {when}  "
+              f"{item['title'] or '(untitled)'}  {item['cwd']}")
+    return 0
+
+
+def cmd_attach(args: argparse.Namespace, cfg: config.Config) -> int:
+    """Straight to the registry, daemon or not: like `register --session`,
+    an attach only rewrites the entry, under the registry lock."""
+    entry = registry.attach(args.id, args.session, args.cwd)
+    if entry["session_id"]:
+        label = claude.title(entry["session_id"]) or "untitled"
+        print(f"{args.id} attached to {entry['session_id']} ({label}), folder {entry['cwd']}")
+    else:
+        print(f"{args.id} detached: no known session")
+    return 0
+
+
+def cmd_detach(args: argparse.Namespace, cfg: config.Config) -> int:
+    args.session, args.cwd = "", None
+    return cmd_attach(args, cfg)
+
+
 def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
     if args.action == "add":
         entry = folders.add(args.folder)
@@ -259,6 +294,20 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--delete", action="store_true", help="also delete the file")
     p.set_defaults(run=cmd_forget)
+
+    sub.add_parser("sessions", help="the conversations a document can be attached to"
+                   ).set_defaults(run=cmd_sessions)
+
+    p = sub.add_parser("attach", help="attach a document to a conversation of this machine")
+    p.add_argument("id")
+    p.add_argument("session", help="its session id (`annotate sessions`); '' detaches")
+    p.add_argument("--cwd", default=None,
+                   help="folder to resume it in (default: the one it started in)")
+    p.set_defaults(run=cmd_attach)
+
+    p = sub.add_parser("detach", help="the document no longer has a known session")
+    p.add_argument("id")
+    p.set_defaults(run=cmd_detach)
 
     p = sub.add_parser("folders", help="the folders whose HTML files are tracked")
     p.add_argument("action", nargs="?", choices=("add", "remove"))

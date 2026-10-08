@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from annotate import browser, listeners, registry, sender, server
+from annotate import browser, claude, listeners, registry, sender, server
 from annotate.config import Config
-from fakes import RecordingOpener
+from fakes import RecordingOpener, compact, conversation, register_session, transcript
 
 
 class Daemon:
@@ -235,7 +235,7 @@ def test_static_files_and_index(daemon, make_doc):
     assert status == 200 and '<script src="/static/index.js">' in page
     status, js = daemon.request("GET", "/static/index.js", raw=True)
     assert status == 200 and b"/api/docs" in js and b"/api/folders" in js
-    assert b"/api/scan" in js
+    assert b"/api/scan" in js and b"/api/sessions" in js and b"/session'" in js
 
 
 def test_a_missing_file_is_gone_not_a_crash(daemon, make_doc):
@@ -362,6 +362,124 @@ def test_folder_and_rescan_requests_need_the_client_header(daemon, tmp_path):
         assert conn.getresponse().status == 403
         conn.close()
     assert daemon.srv.catchups.state() == {"running": None, "last": None}
+
+
+# -- attaching a document to a conversation (2026-10-08) -----------------------
+
+def _attach(daemon, doc_id, body, headers=None):
+    return daemon.request("POST", f"/api/docs/{doc_id}/session", body, headers=headers)
+
+
+def _groups(daemon):
+    """(session, documents) per group; documents sorted, since two registered
+    within the same second have no defined order."""
+    return [(g["session_id"], sorted(g["docs"]))
+            for g in daemon.request("GET", "/api/docs")[1]["sessions"]]
+
+
+def test_attaching_a_document_writes_its_session_and_moves_it_to_that_group(daemon, make_doc,
+                                                                              tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    conversation(claude.projects_dir(), "s-att", cwd=str(work), title="Attached session")
+    a = registry.register(make_doc("<p>a</p>", name="a.html"), session="")["id"]
+    b = registry.register(make_doc("<p>b</p>", name="b.html"), session="")["id"]
+    assert _groups(daemon) == [("", sorted([a, b]))]
+    status, body = _attach(daemon, a, {"session": "s-att"})
+    assert status == 200 and body["doc"]["session_id"] == "s-att"
+    assert body["message"].startswith("Test doc attached to Attached session")
+    assert registry.get(a)["session_id"] == "s-att" and registry.get(a)["cwd"] == str(work)
+    assert registry.get(b)["session_id"] == ""
+    assert _groups(daemon) == [("s-att", [a]), ("", [b])]
+    assert daemon.request("GET", "/api/docs")[1]["sessions"][0]["title"] == "Attached session"
+
+
+def test_a_session_this_machine_cannot_resume_is_refused_with_a_400(daemon, make_doc):
+    projects = claude.projects_dir()
+    transcript(projects, "s-title-only", lines=(compact({"type": "ai-title", "aiTitle": "T"}),))
+    conversation(projects, "agent-sub", folder="-r/s-parent/subagents")
+    doc = registry.register(make_doc("<p>a</p>"), session="s-keep")["id"]
+    for body in ({"session": "nope-1234"}, {"session": "s-title-only"},
+                 {"session": "agent-sub"}, {"session": "../etc"}, {"session": "a b"},
+                 {"session": 42}, {}, {"session": "s-keep", "cwd": 7}):
+        status, answer = _attach(daemon, doc, body)
+        assert status == 400 and answer["error"], (body, status, answer)
+    assert "no conversation nope-1234 on this machine" in _attach(
+        daemon, doc, {"session": "nope-1234"})[1]["error"]
+    assert registry.get(doc)["session_id"] == "s-keep"
+    assert _attach(daemon, "nope0000", {"session": ""})[0] == 404
+
+
+def test_attaching_needs_the_client_header_and_a_local_origin(daemon, make_doc):
+    conversation(claude.projects_dir(), "s-ok")
+    doc = registry.register(make_doc("<p>a</p>"), session="")["id"]
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("POST", f"/api/docs/{doc}/session", body=json.dumps({"session": "s-ok"}),
+                 headers={"Host": f"localhost:{daemon.port}"})
+    assert conn.getresponse().status == 403
+    conn.close()
+    assert _attach(daemon, doc, {"session": "s-ok"},
+                   headers={"Origin": "https://evil.example"})[0] == 403
+    assert registry.get(doc)["session_id"] == ""
+    assert _attach(daemon, doc, {"session": "s-ok"})[0] == 200     # the same, with the header
+    assert registry.get(doc)["session_id"] == "s-ok"
+
+
+def test_detaching_puts_the_document_back_among_those_without_a_session(daemon, make_doc):
+    conversation(claude.projects_dir(), "s-one")
+    doc = registry.register(make_doc("<p>a</p>"), session="s-one")["id"]
+    assert _groups(daemon) == [("s-one", [doc])]
+    status, body = _attach(daemon, doc, {"session": ""})
+    assert status == 200 and "detached" in body["message"]
+    assert registry.get(doc)["session_id"] == ""
+    assert _groups(daemon) == [("", [doc])]
+
+
+def test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder(daemon, make_doc,
+                                                                         tmp_path):
+    path = make_doc("<p>a</p>")
+    repo = tmp_path / "workspace" / "repo"
+    conversation(claude.projects_dir(), "s-wt",
+                 cwd=str(repo / ".claude" / "worktrees" / "agent-x"))   # gone since
+    doc = registry.register(path, session="s0")["id"]
+    registry.update(doc, status="delivered")
+    assert _attach(daemon, doc, {"session": "s-wt"})[0] == 200
+    assert registry.get(doc)["cwd"] == str(repo)
+    assert registry.get(doc)["status"] == "delivered", "an attach is not the session's answer"
+    assert _attach(daemon, doc, {"session": "s-wt", "cwd": str(tmp_path)})[0] == 200
+    assert registry.get(doc)["cwd"] == str(tmp_path)
+    assert _attach(daemon, doc, {"session": "s-wt", "cwd": "relative/dir"})[0] == 400
+    assert registry.get(doc)["cwd"] == str(tmp_path)
+
+
+def test_the_session_list_is_read_without_the_client_header(daemon, tmp_path):
+    conversation(claude.projects_dir(), "s-a", cwd="/work", title="A", when=1000.0)
+    conversation(claude.projects_dir(), "s-b", cwd="/other", when=2000.0)
+    inbox_socket = tmp_path / "s.sock"
+    inbox_socket.write_text("")
+    register_session("s-a", inbox_socket)
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("GET", "/api/sessions", headers={"Host": f"localhost:{daemon.port}"})
+    response = conn.getresponse()
+    body = json.loads(response.read())
+    conn.close()
+    assert response.status == 200 and body["limit"] == claude.SESSION_LIMIT
+    assert body["sessions"] == [
+        {"id": "s-a", "title": "A", "cwd": "/work", "last_active": 1000.0, "open": True},
+        {"id": "s-b", "title": "", "cwd": "/other", "last_active": 2000.0, "open": False}]
+    assert daemon.request("POST", "/api/sessions", {})[0] == 405
+
+
+def test_the_listing_says_which_session_groups_are_open(daemon, make_doc, tmp_path):
+    registry.register(make_doc("<p>a</p>", name="a.html"), session="s-open")
+    registry.register(make_doc("<p>b</p>", name="b.html"), session="s-closed")
+    registry.register(make_doc("<p>c</p>", name="c.html"), session="")
+    inbox_socket = tmp_path / "s.sock"
+    inbox_socket.write_text("")
+    register_session("s-open", inbox_socket)
+    groups = daemon.request("GET", "/api/docs")[1]["sessions"]
+    assert {g["session_id"]: g["open"] for g in groups} == {
+        "s-open": True, "s-closed": False, "": False}
 
 
 def test_the_folder_field_is_offered_subfolders(daemon, tmp_path):

@@ -13,6 +13,9 @@ it holds one `user` or `assistant` line, in the compact form Claude Code
 writes (`"type":"user"`, no space after the colon); an empty transcript, or
 one reduced to its title line, is refused. The folder of the transcript does
 not matter, so every project folder is searched.
+
+The same criterion decides which conversations `sessions()` offers the index
+page, where the user attaches a document to one (registry.attach).
 """
 from __future__ import annotations
 
@@ -20,6 +23,9 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+from . import inbox
 
 MARKERS = ('"type":"user"', '"type":"assistant"')
 SESSION_ID = re.compile(r"^[0-9A-Za-z][0-9A-Za-z-]{0,63}$")
@@ -33,18 +39,23 @@ def projects_dir() -> Path:
     return Path.home() / ".claude" / "projects"
 
 
+def _holds_a_message(transcript: Path) -> bool:
+    """One `user` or `assistant` line, read line by line until the first one:
+    a live transcript weighs up to 60 MB (measured 2026-10-08), and its first
+    message comes within its first lines."""
+    markers = tuple(m.encode("ascii") for m in MARKERS)
+    try:
+        with transcript.open("rb") as handle:
+            return any(marker in line for line in handle for marker in markers)
+    except OSError:
+        return False
+
+
 def resumable(session: str) -> bool:
     """True if `claude --resume <session>` would find the conversation here."""
     if not session or not SESSION_ID.match(session):
         return False
-    for transcript in projects_dir().glob(f"*/{session}.jsonl"):
-        try:
-            text = transcript.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if any(marker in text for marker in MARKERS):
-            return True
-    return False
+    return any(_holds_a_message(t) for t in projects_dir().glob(f"*/{session}.jsonl"))
 
 
 # -- who wrote a file, and what a session is called ---------------------------
@@ -107,6 +118,90 @@ def title(session: str) -> str:
     """The name the user sees for a session: its /rename title, else the
     title Claude Code generated, else ""."""
     return _titles.get(session)
+
+
+# -- the conversations a document can be attached to --------------------------
+
+# How many conversations the index page offers, open ones always included.
+# Measured 2026-10-08 on the author's machine: 153 transcripts, 17 of them
+# active in the last 7 days; the 50 most recent weigh 157 MB, and reading
+# their titles takes 0.4 s the first time, 0.03 s afterwards (incremental).
+# Every transcript would be twice the bytes for conversations nobody looks for.
+SESSION_LIMIT = 50
+
+_cwds: dict[Path, str] = {}
+
+
+def cwd_of(transcript: Path) -> str:
+    """The folder the conversation started in: the `cwd` of the first line
+    that carries one (the same field `writer_of` reads), or "". Read once per
+    transcript: the first line never changes."""
+    if transcript in _cwds:
+        return _cwds[transcript]
+    try:
+        with transcript.open("rb") as handle:
+            for raw in handle:
+                if b'"cwd":"' not in raw:
+                    continue
+                try:
+                    value = json.loads(raw).get("cwd")
+                except (ValueError, AttributeError):
+                    continue
+                if isinstance(value, str) and value.startswith("/"):
+                    _cwds[transcript] = value
+                    return value
+    except OSError:
+        pass
+    return ""
+
+
+def session_cwd(session: str) -> str:
+    """The folder a session started in, from its latest transcript, or ""."""
+    path = transcript_of(session)
+    return cwd_of(path) if path else ""
+
+
+def sessions(limit: int = SESSION_LIMIT) -> list[dict[str, Any]]:
+    """The conversations of this machine a document can be attached to.
+
+    Each one is `{id, title, cwd, last_active, open}`: `title` as `title()`
+    gives it, `cwd` the folder it started in, `last_active` the date of its
+    transcript (epoch seconds), `open` whether a live process of it has an
+    inbox (inbox.open_session_ids, the test the sender applies before
+    posting into it).
+
+    - A conversation is a transcript `<projects>/<folder>/<id>.jsonl` that
+      `claude --resume` would find (`resumable`). Subagent transcripts
+      (`<folder>/<id>/subagents/*.jsonl`) carry their parent's session and
+      are no conversation of their own. Two guards keep them out, each one
+      covering the other: the pattern below does not descend there, and
+      `resumable` only looks one folder deep.
+    - Open ones first, then the most recently active first.
+    - At most `limit` (SESSION_LIMIT) of them, open ones always included: a
+      user can have hundreds of transcripts, and each title is read once.
+    """
+    open_ids = inbox.open_session_ids()
+    latest: dict[str, float] = {}
+    for transcript in projects_dir().glob("*/*.jsonl"):
+        session = transcript.stem
+        if not SESSION_ID.match(session):
+            continue
+        try:
+            mtime = transcript.stat().st_mtime
+        except OSError:
+            continue
+        latest[session] = max(mtime, latest.get(session, mtime))
+    ordered = sorted(latest.items(), key=lambda kv: (kv[0] not in open_ids, -kv[1]))
+    found: list[dict[str, Any]] = []
+    for session, mtime in ordered:
+        is_open = session in open_ids
+        if len(found) >= limit and not is_open:
+            break
+        if not resumable(session):
+            continue
+        found.append({"id": session, "title": title(session), "cwd": session_cwd(session),
+                      "last_active": mtime, "open": is_open})
+    return found
 
 
 def _stamp(text: str) -> float | None:

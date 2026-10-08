@@ -100,19 +100,42 @@ INDEX_SCRIPT = Path(__file__).resolve().parent / "browser" / "index_check.mjs"
 
 @pytest.mark.browser
 def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_doc):
+    import time
+
     from annotate import claude
-    from fakes import compact, transcript
+    from fakes import compact, conversation, register_session, transcript
     pw_dir = os.environ.get("ANNOTATE_PLAYWRIGHT_DIR", "")
     node = shutil.which("node")
     assert pw_dir and node, "see test_overlay_in_a_real_browser"
-    transcript(claude.projects_dir(), "s-live", lines=(
-        compact({"type": "ai-title", "aiTitle": "Live session"}),))
+    # The conversations of this machine: two titled ones, the first OPEN, an
+    # untitled one; and two the picker must not offer (a subagent's, and a
+    # transcript `claude --resume` would refuse).
+    now, projects, ws = time.time(), claude.projects_dir(), tmp_path / "workspace"
+    conversation(projects, "s-live", cwd=str(ws / "repo"), title="Live session", when=now - 120)
+    conversation(projects, "s-other", cwd=str(ws / "other"), title="Other session",
+                 when=now - 3 * 3600)
+    conversation(projects, "s-untitled", cwd=str(ws / "third"), when=now - 2 * 86400)
+    conversation(projects, "agent-sub1", folder="-x/s-live/subagents", title="A subagent",
+                 when=now)
+    transcript(projects, "s-title-only", lines=(
+        compact({"type": "ai-title", "aiTitle": "Never resumable"}),))
+    (tmp_path / "live.sock").write_text("")
+    register_session("s-live", tmp_path / "live.sock")
     alpha = registry.register(make_doc("<p>a</p>", name="a.html", title="Alpha"),
                               session="s-live")["id"]
     bravo_path = make_doc("<p>b</p>", name="b.html", title="Bravo")
     bravo = registry.register(bravo_path, session="")["id"]
     charlie_path = make_doc("<p>c</p>", name="c.html", title="Charlie")
     charlie = registry.register(charlie_path, session="s-live")["id"]
+    echo = registry.register(make_doc("<p>e</p>", name="e.html", title="Echo"),
+                             session="s-other")["id"]
+    registry.replace_annotations(echo, [{"id": "e1", "selector": "body", "quote": "e",
+                                         "note": "already sent"}])
+    registry.mark_sent(echo, ["e1"], registry.now_iso())
+    registry.update(echo, status="delivered")
+    foxtrot_path = make_doc("<p>f</p>", name="f.html", title="Foxtrot")
+    foxtrot = registry.register(foxtrot_path, session="s-other")["id"]
+    foxtrot_path.unlink()
     registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
                                           "note": "from the index page"}])
     reports = tmp_path / "pick" / "reports"          # no docs/ on the way
@@ -144,7 +167,7 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert opener.calls == []
     from annotate import folders
     delta = [i for i, d in registry.all_docs().items() if d["title"] == "Delta"]
-    assert set(registry.all_docs()) == {alpha, *delta} and len(delta) == 1
+    assert set(registry.all_docs()) == {alpha, echo, foxtrot, *delta} and len(delta) == 1
     assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]
     assert bravo_path.exists() and not charlie_path.exists()
     assert bravo and charlie and asked == ["restart", "stop"]

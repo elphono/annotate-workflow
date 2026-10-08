@@ -5,7 +5,8 @@
     GET    /docs/<id>                        the HTML, overlay injected, read from disk
     GET    /docs/<id>/files/<relative>       a file next to the document (images…)
     GET    /static/<name>                    annotate.js, annotate.css
-    GET    /api/docs                         the registry, with annotation counts
+    GET    /api/docs                         the registry, with annotation counts, grouped
+                                             by session (`open`: a live process of it)
     GET    /api/docs/<id>                    one entry
     GET    /api/docs/<id>/annotations        the annotations
     PUT    /api/docs/<id>/annotations        replace them (status -> annotated)
@@ -13,12 +14,16 @@
     POST   /api/docs/<id>/new-session        same, in a NEW session (terminal tab)
     POST   /api/docs/<id>/wait               held until notes come (`annotate wait`)
     POST   /api/docs/<id>/open               open the document in the browser
+    POST   /api/docs/<id>/session {session, cwd}  attach it to a conversation of this
+                                             machine ("" detaches; 400 if not resumable)
     DELETE /api/docs/<id>[?delete=1]         forget it (and delete the file)
     POST   /api/daemon/<restart|stop>        ask systemd (see service.control)
     GET    /api/folders                      the tracked folders, and the rescan state
     POST   /api/folders  {path, days}        track a folder, catch up its recent files
     DELETE /api/folders?path=<folder>        stop tracking it (its documents stay)
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
+    GET    /api/sessions                     the conversations a document can be attached
+                                             to: open first, then most recent (claude.sessions)
     POST   /api/scan     {days}              catch up every tracked folder (scanner)
 
 **Local only, and no open CORS.** The socket is bound to 127.0.0.1. Any web
@@ -50,8 +55,8 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from . import (browser, claude, config, folders, htmldoc, listeners, registry, scanner,
-               sender, service)
+from . import (browser, claude, config, folders, htmldoc, inbox, listeners, registry,
+               scanner, sender, service)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -182,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc.status, str(exc))
         except registry.UnknownDocument as exc:
             self._error(HTTPStatus.NOT_FOUND, str(exc))
-        except registry.InvalidAnnotations as exc:
+        except (registry.InvalidAnnotations, registry.InvalidSession) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except sender.NothingToSend as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
@@ -244,6 +249,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._api(method, parts[2:], query)
         if parts[:2] == ["api", "folders"]:
             return self._folders(method, parts[2:], query)
+        if parts == ["api", "sessions"]:
+            if method != "GET":
+                raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
+            return self._json(HTTPStatus.OK, {"sessions": claude.sessions(),
+                                              "limit": claude.SESSION_LIMIT})
         if parts == ["api", "scan"] and method == "POST":
             body = self._body()
             days = scanner.check_days(body.get("days") if isinstance(body, dict) else None)
@@ -325,6 +335,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
             docs = [self._with_live(d) for d in registry.summary()]
             groups = registry.group_by_session(docs, claude.title, config.workspace())
+            open_ids = inbox.open_session_ids()
+            for group in groups:
+                group["open"] = group["session_id"] in open_ids
             return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs,
                                               "sessions": groups})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
@@ -356,12 +369,28 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, {**result, "message": sender.describe(result)})
         if method == "POST" and action == "wait":
             return self._wait(doc_id)
+        if method == "POST" and action == "session":
+            return self._attach(doc_id)
         if method == "POST" and action == "open":
             registry.get(doc_id)
             url = f"{self.server.base_url()}/docs/{doc_id}"
             return self._json(HTTPStatus.OK, {"url": url,
                                               "opener": browser.open_url(url)})
         raise Refused(HTTPStatus.NOT_FOUND, "not found")
+
+    def _attach(self, doc_id: str) -> None:
+        body = self._body()
+        body = body if isinstance(body, dict) else {}
+        entry = registry.attach(doc_id, body.get("session"), body.get("cwd"))
+        session, name = entry["session_id"], entry.get("title") or entry["path"]
+        if session:
+            label = claude.title(session) or f"session {session[:8]}"
+            message = f"{name} attached to {label}: Send to session reaches it now."
+            log.info("%s attached to session %s from the web page", doc_id, session)
+        else:
+            message = f"{name} detached: it waits among the documents without a session."
+            log.info("%s detached from its session from the web page", doc_id)
+        self._json(HTTPStatus.OK, {"doc": entry, "message": message})
 
 
 def listeners_session_ok(session: str) -> bool:

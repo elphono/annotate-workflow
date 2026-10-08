@@ -12,10 +12,11 @@ named `claude` or `wt.exe`.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
-from annotate import terminal
+from annotate import inbox, terminal
 
 
 class RecordingOpener:
@@ -86,6 +87,20 @@ def read_log(log) -> list:
     return [json.loads(line) for line in path.read_text().splitlines() if line]
 
 
+def register_session(session_id: str, socket_path: Path, *, pid: int | None = None,
+                     proc_start: str | None = None, name: str = "session-c1",
+                     updated: int = 1) -> None:
+    """An entry of the (isolated) `~/.claude/sessions`, as Claude Code writes
+    it for an open session; by default a LIVE one: this test process."""
+    pid = os.getpid() if pid is None else pid
+    start = inbox._proc_start(os.getpid()) if proc_start is None else proc_start
+    inbox.sessions_dir().mkdir(parents=True, exist_ok=True)
+    (inbox.sessions_dir() / f"{pid}-{name}.json").write_text(json.dumps({
+        "pid": pid, "sessionId": session_id, "procStart": start, "name": name,
+        "messagingSocketPath": str(socket_path), "kind": "interactive",
+        "updatedAt": updated}))
+
+
 def transcript(projects: Path, session: str, *, folder: str = "-home-x-repo",
                lines: tuple[str, ...] = ('{"type":"user","message":"hi"}',)) -> Path:
     """A Claude Code transcript as `claude.resumable` reads it."""
@@ -98,6 +113,23 @@ def transcript(projects: Path, session: str, *, folder: str = "-home-x-repo",
 def compact(entry: dict) -> str:
     """A transcript line as Claude Code writes it: no space after `:` or `,`."""
     return json.dumps(entry, separators=(",", ":"), ensure_ascii=False)
+
+
+def conversation(projects: Path, session: str, *, cwd: str = "/repo", title: str = "",
+                 when: float = 1000.0, folder: str = "-home-x-repo") -> Path:
+    """A resumable transcript, shaped like a real one: a few bookkeeping lines
+    without `cwd`, then a user line that carries it; an AI title if given;
+    dated `when` (its mtime is what `claude.sessions` calls last activity)."""
+    lines = [compact({"type": "mode", "mode": "normal", "sessionId": session}),
+             compact({"type": "permission-mode", "permissionMode": "default",
+                      "sessionId": session}),
+             compact({"type": "user", "sessionId": session, "cwd": cwd,
+                      "message": {"role": "user", "content": "hello"}})]
+    if title:
+        lines.append(compact({"type": "ai-title", "aiTitle": title, "sessionId": session}))
+    path = transcript(projects, session, folder=folder, lines=tuple(lines))
+    os.utime(path, (when, when))
+    return path
 
 
 def tool_call(session: str, when: str, command: str, cwd: str = "/repo") -> str:

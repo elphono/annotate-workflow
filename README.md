@@ -103,13 +103,16 @@ stays out until it is written again.
 
 The home page groups documents by session — its title, then its folder — and carries every control:
 Open, Send to session, New session, Unmanage, Delete file; the tracked folders and the rescan; and
-Restart / Stop for the daemon.
+Restart / Stop for the daemon. **Attach to session…** ties a document to any conversation of the
+machine that `claude --resume` can find (open ones first, filter as you type); **Detach** unties it.
 
 ```bash
 uv run annotate list                 # one line per document
 uv run annotate send <id>            # same as the button
 uv run annotate new-session <id>     # the unsent notes go to a NEW session (a terminal tab)
 uv run annotate forget <id> [--delete]
+uv run annotate sessions             # the conversations a document can be attached to
+uv run annotate attach <id> <session>   # or: annotate detach <id>
 uv run annotate folders [add|remove <folder>]   # the tracked folders
 uv run annotate rescan [--days 7] [--folder F]  # register what was written recently
 uv run annotate status

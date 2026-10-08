@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import config, htmldoc
+from . import claude, config, htmldoc
 
 STATUSES = ("new", "annotated", "delivered", "answered")
 MAX_TEXT = 20_000
@@ -60,6 +60,10 @@ class UnknownDocument(RegistryError):
 
 class InvalidAnnotations(RegistryError):
     """A PUT carried a list that is not a valid set of annotations."""
+
+
+class InvalidSession(RegistryError):
+    """An attach named something that is not a conversation of this machine."""
 
 
 def now_iso() -> str:
@@ -260,6 +264,44 @@ def register(path: Path, session: str | None = None,
         table = _read_forgotten()
         if table.pop(str(path), None) is not None:
             _write_forgotten(table)
+        return dict(entry)
+
+
+def attach(doc_id: str, session: object, cwd: object = None) -> dict[str, Any]:
+    """Tie a document to the conversation `session`, or untie it (`""`).
+
+    The user's correction (index page, `annotate attach`) of what the hook or
+    the scan recorded, or could not find: "Send to session" then reaches that
+    conversation. Only one `claude --resume` would find is accepted
+    (claude.resumable): anything else would make the next send open a NEW
+    session under a heading that names another.
+
+    Status and annotations stay as they are: `register` would turn
+    `delivered` into `answered`, and an attach is not the session's answer.
+    The folder becomes `cwd` if given, else the one the session started in,
+    through `usable_cwd` (never a deleted agent worktree). Untying keeps it.
+    """
+    if not isinstance(session, str):
+        raise InvalidSession(f"session must be a string ('' detaches), got {session!r}")
+    if cwd is not None and not (isinstance(cwd, str) and (not cwd or os.path.isabs(cwd))):
+        raise InvalidSession(f"cwd must be an absolute folder, got {cwd!r}")
+    hint = ""
+    if session:
+        if not claude.SESSION_ID.match(session):
+            raise InvalidSession(f"{session!r} is not a Claude Code session id")
+        if not claude.resumable(session):
+            raise InvalidSession(f"no conversation {session} on this machine: "
+                                 f"`claude --resume` would not find it")
+        hint = str(cwd or "") or claude.session_cwd(session)
+    with locked():
+        docs = _read_docs()
+        if doc_id not in docs:
+            raise UnknownDocument(f"no document {doc_id!r} in the registry")
+        entry = docs[doc_id]
+        entry["session_id"] = session
+        if session:
+            entry["cwd"] = str(usable_cwd(hint or entry.get("cwd"), Path(entry["path"])))
+        _write_docs(docs)
         return dict(entry)
 
 

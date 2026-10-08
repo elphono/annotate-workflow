@@ -71,6 +71,10 @@ dossiers suivis (ajout avec suggestions, retrait) et Rescan ; pour le démon Res
 démon n'a pas été lancé par systemd). **Start n'y est pas, et ne peut pas y être** : un démon
 arrêté ne sert plus de page où cliquer ; il reste dans la pastille. La page passe par la même
 API que la pastille, avec la même garde (`X-Annotate`, origine locale).
+**Attach to session… / Detach** (2026-10-08) corrigent la session d'un document : un sélecteur
+filtrable liste les conversations reprenables de la machine (`claude.sessions`, ouvertes
+d'abord, au plus `SESSION_LIMIT` = 50), et `registry.attach` refuse en 400 un id que
+`claude --resume` ne trouverait pas, sans toucher ni au statut ni aux notes.
 
 **La pastille et la page d'accueil classent les documents par session** : le titre de la
 session (son `/rename`, sinon celui que Claude Code a généré, lus dans le transcript, de façon
@@ -93,6 +97,8 @@ uv run python tools/mutate.py            # campagne de mutation dirigée, sur un
 uv run annotate register <chemin.html> [--session ID] [--cwd DIR]
 uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : rend les notes
 uv run annotate list | open <id> | send <id> | new-session <id> | forget <id> [--delete]
+uv run annotate sessions                 # les conversations auxquelles rattacher un document
+uv run annotate attach <id> <session> [--cwd DIR] | detach <id>
 uv run annotate folders [add|remove <dossier>]   # les dossiers suivis
 uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours
 uv run annotate serve                    # le démon, au premier plan
@@ -149,6 +155,8 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | le hook n'enregistre qu'un document d'un dossier suivi, et la règle n'a qu'une copie | `test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder`, `test_every_html_file_is_handed_over_and_annotate_decides` |
 | un dossier ne se suit que sous `~` ; un dossier ajouté suit tout `.html`, le workspace garde sa règle `docs/` | `test_a_folder_outside_the_home_directory_or_not_absolute_is_refused`, `test_a_folder_the_user_adds_tracks_every_html_under_it` |
 | un rescan ne prend que les N derniers jours, un à la fois, et ne ramène pas un document oublié | `test_a_catch_up_takes_the_recent_window_only`, `test_one_catch_up_at_a_time_and_the_last_one_is_reported`, `test_an_unmanaged_document_stays_out_of_a_catch_up_until_written_again` |
+| un document ne se rattache qu'à une conversation que `claude --resume` trouverait ; le rattachement écrit `session_id`, sans toucher au statut ni garder un worktree disparu | `test_attaching_a_document_writes_its_session_and_moves_it_to_that_group`, `test_a_session_this_machine_cannot_resume_is_refused_with_a_400`, `test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder` |
+| la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
