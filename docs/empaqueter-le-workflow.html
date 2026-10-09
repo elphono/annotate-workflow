@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Empaqueter le workflow</title>
+<style>
+:root {
+  --bg: #fbfaf7; --paper: #ffffff; --ink: #1d232b; --muted: #5d6673; --line: #e3e0d8;
+  --claude: #2563eb; --claude-soft: #dbe7ff;
+  --docpin: #c2410c; --docpin-soft: #ffe6d5;
+  --plat: #7c3aed; --plat-soft: #ece3ff;
+  --gen: #15803d; --adapt: #a16207; --own: #b91c1c; --unk: #6b7280;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+    --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+    --plat: #b79bff; --plat-soft: #2d2350; --gen: #4ade80; --adapt: #fbbf24; --own: #f87171;
+    --unk: #9ca3af;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+  --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+  --plat: #b79bff; --plat-soft: #2d2350; --gen: #4ade80; --adapt: #fbbf24; --own: #f87171;
+  --unk: #9ca3af;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 10px; padding-top: 10px; border-top: 2px solid var(--line); }
+h3 { font-size: 17px; margin: 24px 0 8px; }
+h3.side { border-left: 6px solid var(--line); padding-left: 10px; }
+h3.side.claude { border-color: var(--claude); } h3.side.docpin { border-color: var(--docpin); }
+h3.side.plat { border-color: var(--plat); }
+a { color: var(--claude); }
+.lede { color: var(--muted); font-size: 17px; margin: 0 0 14px; }
+.levels { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.levels span { color: var(--muted); font-size: 14px; }
+.levels button { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.levels button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+nav.toc a { text-decoration: none; color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.verdict { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--docpin);
+  border-radius: 10px; padding: 12px 16px; margin: 14px 0; }
+.warn { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--own);
+  border-radius: 10px; padding: 10px 16px; margin: 14px 0; }
+.reco { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--gen);
+  border-radius: 10px; padding: 10px 16px; margin: 10px 0 4px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.tile { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.tile b { display: block; font-size: 30px; line-height: 1.1; }
+.tile span { color: var(--muted); font-size: 14px; }
+.tile.own b { color: var(--own); } .tile.adapt b { color: var(--adapt); } .tile.gen b { color: var(--gen); }
+figure { margin: 16px 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.narrowfig svg { max-width: 460px; margin: 0 auto; }
+@media (max-width: 999px) { .wide-only { display: none; } }
+@media (min-width: 1000px) { .narrow-only { display: none; } }
+.split { display: grid; gap: 4px 22px; align-items: start; }
+@media (min-width: 900px) { .split { grid-template-columns: minmax(0, 1fr) 470px; } }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--paper); font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line);
+  overflow-wrap: break-word; }
+table.inv th:nth-child(1) { width: 17%; } table.inv th:nth-child(2) { width: 24%; }
+table.inv th:nth-child(3) { width: 19%; } table.inv th:nth-child(4) { width: 18%; }
+table.excl th:nth-child(1) { width: 34%; } table.excl th:nth-child(2) { width: 18%; }
+table.matrix th:nth-child(1) { width: 20%; }
+table.matrix td:not(:first-child) { font-size: 14px; }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: .9em; overflow-wrap: anywhere; }
+.tag { display: inline-block; font-size: 13px; font-weight: 700; padding: 0 8px; border-radius: 999px;
+  border: 1.5px solid currentColor; white-space: nowrap; margin: 0 4px 2px 0; }
+.tag.gen, .y { color: var(--gen); } .tag.adapt, .w { color: var(--adapt); } .tag.own, .n { color: var(--own); }
+.tag.unk, .u { color: var(--unk); }
+.y, .w, .n, .u { font-weight: 700; }
+details { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 12px 0; }
+summary { cursor: pointer; font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; }
+blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+ul.tight { margin: 6px 0; padding-left: 20px; } ul.tight li { margin: 2px 0; }
+.q { border: 1px solid var(--line); border-radius: 12px; padding: 2px 16px 12px; margin: 18px 0; }
+.q h3 { margin-top: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--muted); margin: 6px 0 10px; }
+/* svg text: wide figures are drawn at about 1 unit per pixel, narrow ones are capped at 460 px */
+.s15 { font-size: 15px; fill: var(--ink); } .s16b { font-size: 16px; font-weight: 700; fill: var(--ink); }
+.s18 { font-size: 18px; fill: var(--ink); } .s19b { font-size: 19px; font-weight: 700; fill: var(--ink); }
+.lane { font-size: 16px; font-weight: 700; }
+.bn { font-size: 15px; font-weight: 700; fill: var(--paper); } .bn18 { font-size: 18px; font-weight: 700; fill: var(--paper); }
+.mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; }
+.mut { fill: var(--muted); }
+.box { fill: var(--paper); stroke-width: 2; }
+.arr { fill: none; stroke-width: 2; }
+.dash { stroke-dasharray: 6 4; }
+/* depth selector: level 1 keeps the claims, level 3 opens every proof */
+body[data-level="1"] .l2 { display: none !important; }
+@media (max-width: 640px) {
+  h1 { font-size: 25px; } body { font-size: 15px; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  td { border: none; padding: 2px 10px; }
+  td[data-label]::before { content: attr(data-label); display: block; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+}
+</style>
+</head>
+<body data-level="2">
+<main>
+<p class="lede">docpin · note de réflexion du 2026-10-09 · rien n'est construit ici, tout est à arbitrer</p>
+<h1>Empaqueter le workflow</h1>
+<p class="lede">Ce qui fait qu'une session Claude Code produit un document HTML très visuel, que son lecteur
+l'annote dans le navigateur, et que les notes reviennent à la conversation qui l'a écrit — puis ce qu'il
+faudrait pour que quelqu'un d'autre installe le tout.</p>
+
+<div class="levels" role="group" aria-label="Profondeur de lecture">
+  <span>Profondeur :</span>
+  <button type="button" data-level="1" aria-pressed="false">1 · L'affirmation</button>
+  <button type="button" data-level="2" aria-pressed="true">2 · Le raisonnement</button>
+  <button type="button" data-level="3" aria-pressed="false">3 · Les preuves</button>
+</div>
+
+<nav class="toc">
+  <a href="#chaine">1 · La chaîne</a>
+  <a href="#leviers">2 · Les leviers</a>
+  <a href="#inventaire">3 · Inventaire</a>
+  <a href="#synchro">4 · Synchro</a>
+  <a href="#plateformes">5 · Plateformes</a>
+  <a href="#plugin">6 · Plugin</a>
+  <a href="#options">7 · Options</a>
+  <a href="#generaliser">8 · Généraliser</a>
+  <a href="#questions">9 · Questions</a>
+  <a href="#mesure">10 · Mesuré ou non</a>
+</nav>
+
+<div class="verdict"><strong>En une phrase :</strong> la boucle elle-même (docpin) part presque telle quelle ;
+ce qui ne part pas, c'est ce qui l'entoure. La manière de pousser une session à dessiner vit dans une
+configuration personnelle qui ne se livre pas, le hook se branche à la main par un chemin absolu, et le repli
+par onglet, l'ouverture du navigateur et la pastille supposent Windows et WSL.</div>
+
+<div class="tiles">
+  <div class="tile"><b>36</b><span>pièces inventoriées, chacune lue sur disque</span></div>
+  <div class="tile own"><b>11</b><span>propres à l'auteur ou à sa machine</span></div>
+  <div class="tile adapt"><b>12</b><span>à adapter, changement nommé</span></div>
+  <div class="tile gen"><b>13</b><span>généralisables telles quelles</span></div>
+  <div class="tile"><b>9</b><span>questions à arbitrer</span></div>
+</div>
+
+<!-- ============================================================ 1 -->
+<h2 id="chaine">1 · La chaîne de bout en bout</h2>
+<div class="verdict"><strong>Affirmation :</strong> huit étapes, trois propriétaires. La session écrit, docpin
+enregistre et sert, le navigateur annote, et les notes reviennent par l'une de trois routes ; la correction
+réécrit le fichier, ce qui relance la boucle.</div>
+
+<figure class="wide-only">
+<svg viewBox="0 0 920 806" role="img" aria-labelledby="w-t">
+  <title id="w-t">La chaîne : leviers de forme, session, document, enregistrement, démon, navigateur, trois routes de retour, correction</title>
+  <defs>
+    <marker id="w-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+    <marker id="w-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--claude)"/></marker>
+    <marker id="w-ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--docpin)"/></marker>
+    <marker id="w-ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--plat)"/></marker>
+  </defs>
+  <!-- lanes -->
+  <rect x="6" y="6" width="296" height="794" rx="12" fill="var(--claude-soft)"/>
+  <rect x="312" y="6" width="296" height="794" rx="12" fill="var(--docpin-soft)"/>
+  <rect x="618" y="6" width="296" height="794" rx="12" fill="var(--plat-soft)"/>
+  <text x="20" y="32" class="lane" fill="var(--claude)">Claude Code + config</text>
+  <text x="326" y="32" class="lane" fill="var(--docpin)">docpin</text>
+  <text x="632" y="32" class="lane" fill="var(--plat)">Windows / WSL</text>
+
+  <!-- 1 levers -->
+  <rect x="34" y="48" width="254" height="128" rx="8" class="box" stroke="var(--claude)"/>
+  <circle cx="54" cy="69" r="12" fill="var(--claude)"/><text x="54" y="74" text-anchor="middle" class="bn">1</text>
+  <text x="74" y="75" class="s16b">Les leviers de forme</text>
+  <text x="48" y="101" class="s15">règles ~/.claude/rules/</text>
+  <text x="48" y="123" class="s15">style visuel-dabord</text>
+  <text x="48" y="145" class="s15">garde-fou visuel-livrable.py</text>
+  <text x="48" y="167" class="s15">skill epic-infographics</text>
+  <path d="M161,176 V194" class="arr" stroke="var(--claude)" marker-end="url(#w-ac)"/>
+  <text x="172" y="191" class="s15 mut">façonnent</text>
+
+  <!-- WSL note -->
+  <rect x="644" y="48" width="256" height="88" rx="8" class="box dash" stroke="var(--plat)"/>
+  <text x="658" y="74" class="s16b">WSL2 en mode mirrored</text>
+  <text x="658" y="98" class="s15">Windows atteint 127.0.0.1</text>
+  <text x="658" y="120" class="s15">de WSL — jamais localhost</text>
+
+  <!-- 2 session -->
+  <rect x="34" y="198" width="254" height="66" rx="8" class="box" stroke="var(--claude)"/>
+  <circle cx="54" cy="219" r="12" fill="var(--claude)"/><text x="54" y="224" text-anchor="middle" class="bn">2</text>
+  <text x="74" y="225" class="s16b">La session écrit</text>
+  <text x="48" y="252" class="s15">Write, Edit, ou cp (sous-agent)</text>
+  <path d="M288,231 H322" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+
+  <!-- 3 document -->
+  <rect x="326" y="198" width="256" height="66" rx="8" class="box dash" stroke="var(--muted)"/>
+  <circle cx="346" cy="219" r="12" fill="var(--muted)"/><text x="346" y="224" text-anchor="middle" class="bn">3</text>
+  <text x="366" y="225" class="s16b">Le document</text>
+  <text x="340" y="252" class="s15 mono">&lt;repo&gt;/docs/&lt;name&gt;.html</text>
+  <path d="M454,264 V286" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+
+  <!-- 4 registration -->
+  <rect x="326" y="290" width="256" height="102" rx="8" class="box" stroke="var(--docpin)"/>
+  <circle cx="346" cy="311" r="12" fill="var(--docpin)"/><text x="346" y="316" text-anchor="middle" class="bn">4</text>
+  <text x="366" y="317" class="s16b">Enregistrement</text>
+  <text x="340" y="342" class="s15">hook register-on-write.py</text>
+  <text x="340" y="364" class="s15">ou parcours du démon, 30 s</text>
+  <text x="340" y="386" class="s15">→ registry.json</text>
+  <!-- instruction back to the session -->
+  <path d="M326,320 H270 V268" class="arr" stroke="var(--docpin)" marker-end="url(#w-ad)"/>
+  <text x="48" y="344" class="s15" fill="var(--docpin)" style="fill: var(--docpin)">consigne du hook :</text>
+  <text x="48" y="365" class="s15" style="fill: var(--docpin)">lancer annotate wait</text>
+
+  <!-- transcripts -->
+  <rect x="34" y="410" width="254" height="80" rx="8" class="box dash" stroke="var(--claude)"/>
+  <text x="48" y="434" class="s16b">Transcripts</text>
+  <text x="48" y="457" class="s15">~/.claude/projects/</text>
+  <text x="48" y="479" class="s15">l'auteur d'un cp s'y lit</text>
+  <path d="M326,372 H306 V448 H292" class="arr dash" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+
+  <!-- 5 daemon -->
+  <path d="M454,392 V412" class="arr" stroke="var(--docpin)" marker-end="url(#w-ad)"/>
+  <rect x="326" y="416" width="256" height="96" rx="8" class="box" stroke="var(--docpin)"/>
+  <circle cx="346" cy="437" r="12" fill="var(--docpin)"/><text x="346" y="442" text-anchor="middle" class="bn">5</text>
+  <text x="366" y="443" class="s16b">Démon annotate serve</text>
+  <text x="340" y="468" class="s15">127.0.0.1:8765, stdlib seule</text>
+  <text x="340" y="490" class="s15">sert le HTML + l'overlay</text>
+
+  <!-- 6 browser -->
+  <rect x="644" y="416" width="256" height="96" rx="8" class="box" stroke="var(--plat)"/>
+  <circle cx="664" cy="437" r="12" fill="var(--plat)"/><text x="664" y="442" text-anchor="middle" class="bn">6</text>
+  <text x="684" y="443" class="s16b">Navigateur Windows</text>
+  <text x="658" y="468" class="s15">Alt+clic : épingle + note</text>
+  <text x="658" y="490" class="s15">puis « Send to session »</text>
+  <path d="M582,446 H640" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+  <text x="592" y="440" class="s15 mut">sert</text>
+  <path d="M644,484 H586" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+  <text x="590" y="478" class="s15 mut">notes</text>
+
+  <!-- systemd -->
+  <rect x="644" y="536" width="256" height="66" rx="8" class="box" stroke="var(--plat)"/>
+  <text x="658" y="561" class="s16b">systemd --user</text>
+  <text x="658" y="587" class="s15">lance et relance le démon</text>
+  <path d="M644,569 H612 V500 H586" class="arr" stroke="var(--plat)" marker-end="url(#w-ap)"/>
+
+  <!-- send rule and fan-out -->
+  <text x="372" y="538" class="s15">« Send » : A si une session</text>
+  <text x="372" y="558" class="s15">attend, sinon B, sinon C ;</text>
+  <text x="372" y="578" class="s15">jamais en arrière-plan.</text>
+  <path d="M346,512 V616 H161 V632" class="arr" stroke="var(--docpin)" marker-end="url(#w-ad)"/>
+  <path d="M346,616 H454 V632" class="arr" stroke="var(--docpin)" marker-end="url(#w-ad)"/>
+  <path d="M346,616 H772 V632" class="arr" stroke="var(--docpin)" marker-end="url(#w-ad)"/>
+
+  <!-- 7 routes -->
+  <rect x="34" y="636" width="254" height="72" rx="8" class="box" stroke="var(--claude)"/>
+  <circle cx="54" cy="657" r="12" fill="var(--claude)"/><text x="54" y="662" text-anchor="middle" class="bn">B</text>
+  <text x="74" y="663" class="s16b">Boîte de réception</text>
+  <text x="48" y="691" class="s15">~/.claude/sessions + socket</text>
+  <rect x="326" y="636" width="256" height="72" rx="8" class="box" stroke="var(--docpin)"/>
+  <circle cx="346" cy="657" r="12" fill="var(--docpin)"/><text x="346" y="662" text-anchor="middle" class="bn">A</text>
+  <text x="366" y="663" class="s16b">annotate wait</text>
+  <text x="340" y="691" class="s15">la session attendait</text>
+  <rect x="644" y="636" width="256" height="72" rx="8" class="box" stroke="var(--plat)"/>
+  <circle cx="664" cy="657" r="12" fill="var(--plat)"/><text x="664" y="662" text-anchor="middle" class="bn">C</text>
+  <text x="684" y="663" class="s16b">Onglet wt.exe</text>
+  <text x="658" y="691" class="s15 mono">claude --resume &lt;id&gt;</text>
+
+  <!-- 8 correction and loop -->
+  <path d="M161,708 V726" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+  <path d="M454,708 V726" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+  <path d="M772,708 V762 H586" class="arr" stroke="var(--muted)" marker-end="url(#w-ai)"/>
+  <rect x="34" y="730" width="548" height="64" rx="8" class="box" stroke="var(--claude)"/>
+  <circle cx="54" cy="751" r="12" fill="var(--claude)"/><text x="54" y="756" text-anchor="middle" class="bn">8</text>
+  <text x="74" y="757" class="s16b">La session corrige le HTML</text>
+  <text x="48" y="783" class="s15">le hook repasse (delivered → answered) ; elle relance annotate wait</text>
+  <path d="M34,762 H20 V231 H30" class="arr" stroke="var(--claude)" marker-end="url(#w-ac)"/>
+</svg>
+<figcaption>Une bande par propriétaire : bleu, Claude Code et la configuration de l'utilisateur ; orange, docpin ;
+violet, ce que fournissent Windows et WSL. Cadre en pointillés : un fichier ou une condition, pas un acteur ;
+flèche en pointillés : une lecture. 13 nœuds.</figcaption>
+</figure>
+
+<figure class="narrow-only">
+<svg viewBox="0 0 420 1524" role="img" aria-labelledby="t-t">
+  <title id="t-t">La chaîne de bout en bout, en une colonne</title>
+  <defs>
+    <marker id="t-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+    <marker id="t-ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--claude)"/></marker>
+    <marker id="t-ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--docpin)"/></marker>
+  </defs>
+  <!-- legend -->
+  <rect x="24" y="12" width="20" height="20" rx="4" fill="var(--claude-soft)" stroke="var(--claude)" stroke-width="2"/>
+  <text x="52" y="29" class="s18">Claude Code + config</text>
+  <rect x="272" y="12" width="20" height="20" rx="4" fill="var(--docpin-soft)" stroke="var(--docpin)" stroke-width="2"/>
+  <text x="300" y="29" class="s18">docpin</text>
+  <rect x="24" y="44" width="20" height="20" rx="4" fill="var(--plat-soft)" stroke="var(--plat)" stroke-width="2"/>
+  <text x="52" y="61" class="s18">Windows / WSL</text>
+  <rect x="272" y="44" width="20" height="20" rx="4" class="box dash" stroke="var(--muted)"/>
+  <text x="300" y="61" class="s18">fichier</text>
+
+  <!-- 1 -->
+  <rect x="24" y="84" width="360" height="150" rx="10" class="box" stroke="var(--claude)" style="fill: var(--claude-soft)"/>
+  <circle cx="48" cy="109" r="15" fill="var(--claude)"/><text x="48" y="115" text-anchor="middle" class="bn18">1</text>
+  <text x="72" y="116" class="s19b">Les leviers de forme</text>
+  <text x="40" y="146" class="s18">règles ~/.claude/rules/</text>
+  <text x="40" y="171" class="s18">style visuel-dabord</text>
+  <text x="40" y="196" class="s18">garde-fou visuel-livrable.py</text>
+  <text x="40" y="221" class="s18">skill epic-infographics</text>
+  <path d="M204,234 V258" class="arr" stroke="var(--claude)" marker-end="url(#t-ac)"/>
+  <text x="216" y="253" class="s18 mut">façonnent</text>
+  <!-- 2 -->
+  <rect x="24" y="262" width="360" height="80" rx="10" class="box" stroke="var(--claude)" style="fill: var(--claude-soft)"/>
+  <circle cx="48" cy="287" r="15" fill="var(--claude)"/><text x="48" y="293" text-anchor="middle" class="bn18">2</text>
+  <text x="72" y="294" class="s19b">La session écrit</text>
+  <text x="40" y="327" class="s18">Write, Edit, ou cp (sous-agent)</text>
+  <path d="M204,342 V366" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <!-- 3 -->
+  <rect x="24" y="370" width="360" height="80" rx="10" class="box dash" stroke="var(--muted)"/>
+  <circle cx="48" cy="395" r="15" fill="var(--muted)"/><text x="48" y="401" text-anchor="middle" class="bn18">3</text>
+  <text x="72" y="402" class="s19b">Le document</text>
+  <text x="40" y="435" class="s18 mono">&lt;repo&gt;/docs/&lt;name&gt;.html</text>
+  <path d="M204,450 V474" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <!-- 4 -->
+  <rect x="24" y="478" width="360" height="150" rx="10" class="box" stroke="var(--docpin)" style="fill: var(--docpin-soft)"/>
+  <circle cx="48" cy="503" r="15" fill="var(--docpin)"/><text x="48" y="509" text-anchor="middle" class="bn18">4</text>
+  <text x="72" y="510" class="s19b">Enregistrement</text>
+  <text x="40" y="540" class="s18">hook register-on-write.py</text>
+  <text x="40" y="565" class="s18">ou parcours du démon, 30 s</text>
+  <text x="40" y="590" class="s18" style="fill: var(--claude)">auteur lu dans ~/.claude/projects</text>
+  <text x="40" y="615" class="s18">→ consigne : annotate wait</text>
+  <path d="M204,628 V652" class="arr" stroke="var(--docpin)" marker-end="url(#t-ad)"/>
+  <!-- 5 -->
+  <rect x="24" y="656" width="360" height="128" rx="10" class="box" stroke="var(--docpin)" style="fill: var(--docpin-soft)"/>
+  <circle cx="48" cy="681" r="15" fill="var(--docpin)"/><text x="48" y="687" text-anchor="middle" class="bn18">5</text>
+  <text x="72" y="688" class="s19b">Démon annotate serve</text>
+  <text x="40" y="718" class="s18">127.0.0.1:8765, stdlib seule</text>
+  <text x="40" y="743" class="s18">sert le HTML + l'overlay</text>
+  <text x="40" y="768" class="s18" style="fill: var(--plat)">lancé par systemd --user</text>
+  <path d="M204,784 V808" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <text x="216" y="803" class="s18 mut">sert</text>
+  <!-- 6 -->
+  <rect x="24" y="812" width="360" height="128" rx="10" class="box" stroke="var(--plat)" style="fill: var(--plat-soft)"/>
+  <circle cx="48" cy="837" r="15" fill="var(--plat)"/><text x="48" y="843" text-anchor="middle" class="bn18">6</text>
+  <text x="72" y="844" class="s19b">Navigateur Windows</text>
+  <text x="40" y="874" class="s18">via WSL2 en mode mirrored</text>
+  <text x="40" y="899" class="s18">Alt+clic : épingle + note</text>
+  <text x="40" y="924" class="s18">puis « Send to session »</text>
+  <!-- send rule -->
+  <path d="M40,940 V1044" class="arr" stroke="var(--docpin)" marker-end="url(#t-ad)"/>
+  <text x="58" y="976" class="s18">« Send » : le démon essaie A,</text>
+  <text x="58" y="1000" class="s18">puis B, puis C — jamais</text>
+  <text x="58" y="1024" class="s18">en arrière-plan.</text>
+  <!-- 7 routes -->
+  <rect x="24" y="1048" width="360" height="80" rx="10" class="box" stroke="var(--docpin)" style="fill: var(--docpin-soft)"/>
+  <circle cx="48" cy="1073" r="15" fill="var(--docpin)"/><text x="48" y="1079" text-anchor="middle" class="bn18">A</text>
+  <text x="72" y="1080" class="s19b">annotate wait</text>
+  <text x="40" y="1113" class="s18">la session attendait</text>
+  <path d="M40,1128 V1158" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <text x="56" y="1152" class="s18 mut">sinon</text>
+  <rect x="24" y="1162" width="360" height="80" rx="10" class="box" stroke="var(--claude)" style="fill: var(--claude-soft)"/>
+  <circle cx="48" cy="1187" r="15" fill="var(--claude)"/><text x="48" y="1193" text-anchor="middle" class="bn18">B</text>
+  <text x="72" y="1194" class="s19b">Boîte de réception</text>
+  <text x="40" y="1227" class="s18">~/.claude/sessions + socket</text>
+  <path d="M40,1242 V1272" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <text x="56" y="1266" class="s18 mut">sinon</text>
+  <rect x="24" y="1276" width="360" height="80" rx="10" class="box" stroke="var(--plat)" style="fill: var(--plat-soft)"/>
+  <circle cx="48" cy="1301" r="15" fill="var(--plat)"/><text x="48" y="1307" text-anchor="middle" class="bn18">C</text>
+  <text x="72" y="1308" class="s19b">Onglet wt.exe</text>
+  <text x="40" y="1341" class="s18 mono">claude --resume &lt;id&gt;</text>
+  <!-- collector to 8 -->
+  <path d="M384,1088 H394 M384,1202 H394 M384,1316 H394" class="arr" stroke="var(--muted)"/>
+  <path d="M394,1088 V1424 H388" class="arr" stroke="var(--muted)" marker-end="url(#t-ai)"/>
+  <!-- 8 -->
+  <rect x="24" y="1384" width="360" height="128" rx="10" class="box" stroke="var(--claude)" style="fill: var(--claude-soft)"/>
+  <circle cx="48" cy="1409" r="15" fill="var(--claude)"/><text x="48" y="1415" text-anchor="middle" class="bn18">8</text>
+  <text x="72" y="1416" class="s19b">La session corrige le HTML</text>
+  <text x="40" y="1446" class="s18">le hook repasse :</text>
+  <text x="40" y="1471" class="s18">delivered → answered,</text>
+  <text x="40" y="1496" class="s18">elle relance annotate wait</text>
+  <path d="M384,1470 H410 V302 H388" class="arr" stroke="var(--claude)" marker-end="url(#t-ac)"/>
+</svg>
+<figcaption>Même chaîne, en une colonne pour les écrans étroits. La couleur du cadre dit qui fournit la pièce ;
+une ligne colorée autrement à l'intérieur d'un cadre (le transcript, systemd) appartient à l'autre côté.</figcaption>
+</figure>
+
+<details class="l2 proof">
+<summary>Preuve — ce qui est branché dans les settings de l'auteur</summary>
+<pre>$ python3 -c '…liste les hooks de ~/.claude/settings.json…'   # chemins anonymisés
+PreToolUse   Bash                   ~/.claude/hooks/rtk-guard.sh
+PreToolUse   *                      ~/.claude/hooks/pause-freeze.sh 86400
+PreToolUse   Agent                  ~/.claude/hooks/confier-plafond.py
+SessionStart startup|clear|compact  ~/.claude/hooks/sync-pull.sh
+SessionStart startup|clear|compact  ~/.claude/hooks/travaux-photo.sh
+SessionStart startup|resume|clear|compact ~/.claude/hooks/pause-announce.sh
+Stop         (tous)                 ~/.claude/hooks/sync-push.sh
+PostToolUse  Write|Edit|MultiEdit   ~/.claude/hooks/visuel-livrable.py
+PostToolUse  Write|Edit             &lt;clone docpin&gt;/hooks/register-on-write.py
+outputStyle  visuel-dabord</pre>
+<p>Seules les deux lignes <code>PostToolUse</code> et <code>outputStyle</code> font partie de la chaîne ; les autres sont
+écartées en 3d, avec leur motif.</p>
+</details>
+
+<!-- ============================================================ 2 -->
+<h2 id="leviers">2 · Ce qui pousse une session à dessiner</h2>
+<div class="verdict"><strong>Affirmation :</strong> quatre leviers, de la consigne à la contrainte. Un seul
+s'exécute — le garde-fou — et il ne couvre que deux arborescences écrites en dur.</div>
+<div class="split l2">
+  <div>
+    <p>Les règles disent pourquoi, et à quel coût mesuré ; le style de sortie dit la forme, à chaque requête ; le skill
+    fabrique les figures riches ; le garde-fou relit le fichier écrit et oblige la session à le reprendre. Les trois
+    premiers ne valent que si le modèle les suit, le dernier bloque.</p>
+    <p>Deux limites à connaître avant d'empaqueter. Le style ne s'applique pas aux sous-agents, qui ont leur propre
+    prompt système ; or c'est souvent un sous-agent qui compose un document. Et le périmètre du garde-fou n'est pas
+    celui de docpin : deux définitions de « ce qui est un document » coexistent, et elles divergent depuis que
+    docpin laisse l'utilisateur choisir ses dossiers (2026-10-07).</p>
+  </div>
+  <figure class="narrowfig">
+  <svg viewBox="0 0 420 432" role="img" aria-labelledby="l-t">
+    <title id="l-t">Quatre leviers, de la consigne à la contrainte</title>
+    <defs><marker id="l-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <path d="M30,24 V412" class="arr" stroke="var(--muted)" marker-end="url(#l-a)"/>
+    <text transform="rotate(90 14 218)" x="14" y="224" text-anchor="middle" class="s18 mut">de la consigne à la contrainte</text>
+    <rect x="52" y="16" width="360" height="92" rx="10" class="box" stroke="var(--claude)"/>
+    <text x="66" y="44" class="s19b">Règles ~/.claude/rules/</text>
+    <text x="66" y="70" class="s18">chargées dans chaque session</text>
+    <text x="66" y="95" class="s18 mut">→ le modèle peut les oublier</text>
+    <rect x="52" y="120" width="360" height="92" rx="10" class="box" stroke="var(--claude)"/>
+    <text x="66" y="148" class="s19b">Skill epic-infographics</text>
+    <text x="66" y="174" class="s18">chargé quand la tâche le demande</text>
+    <text x="66" y="199" class="s18 mut">→ un outil, pas une règle</text>
+    <rect x="52" y="224" width="360" height="92" rx="10" class="box" stroke="var(--claude)"/>
+    <text x="66" y="252" class="s19b">Style visuel-dabord</text>
+    <text x="66" y="278" class="s18">renvoyé à chaque requête</text>
+    <text x="66" y="303" class="s18 mut">→ mais pas aux sous-agents</text>
+    <rect x="52" y="328" width="360" height="92" rx="10" class="box" stroke="var(--claude)" stroke-width="3" style="fill: var(--claude-soft)"/>
+    <text x="66" y="356" class="s19b">Garde-fou visuel-livrable.py</text>
+    <text x="66" y="382" class="s18">s'exécute après chaque écriture</text>
+    <text x="66" y="407" class="s18 mut">→ bloque, sous deux dossiers</text>
+  </svg>
+  <figcaption>Le seul cadre plein est le seul qui s'exécute. Sa portée : <code>~/workspace/**/docs/</code> et
+  <code>~/.claude/sync/docs/</code>, rien d'autre.</figcaption>
+  </figure>
+</div>
+<details class="l2 proof">
+<summary>Preuve — le périmètre du garde-fou, et ce que dit la documentation du style</summary>
+<pre># ~/.claude/hooks/visuel_commun.py, est_couvert()
+    if parties[:1] == ("workspace",) and "docs" in parties[1:]:
+        return True
+    return parties[:3] == (".claude", "sync", "docs")
+
+# src/annotate/folders.py — la règle de docpin, elle, se choisit sur la page d'accueil
+#   the default one, the workspace : every .html with a docs/ folder on the way
+#   a folder the user added        : every .html, at any depth</pre>
+<blockquote>« Other subagents run their own system prompt, so styles don't change how they respond. » — et :
+« In the terminal, Claude Code reads style files when it starts. »<br>
+<a href="https://code.claude.com/docs/en/output-styles">code.claude.com/docs/en/output-styles</a>, lu le 2026-10-09</blockquote>
+</details>
+
+<!-- ============================================================ 3 -->
+<h2 id="inventaire">3 · L'inventaire</h2>
+<div class="verdict"><strong>Affirmation :</strong> trente-six pièces, chacune lue sur disque. La dernière colonne
+dit ce qui part tel quel, ce qui part moyennant un changement nommé, et ce qui reste à l'auteur.</div>
+<div class="l2">
+<div class="legend"><span><span class="tag gen">généralisable</span> part telle quelle</span>
+<span><span class="tag adapt">à adapter</span> part, avec le changement indiqué</span>
+<span><span class="tag own">propre</span> à l'auteur ou à sa machine : ne part pas</span></div>
+
+<h3 class="side claude">3a · Côté config Claude — lecture seule de <code>~/.claude/</code></h3>
+<div class="scroll"><table class="inv">
+<thead><tr><th>Composant</th><th>Rôle</th><th>Où (chemin anonymisé)</th><th>Dépend de</th><th>Portée</th></tr></thead>
+<tbody>
+<tr><td><b>Style de sortie <code>visuel-dabord</code></b></td>
+<td>Impose la forme : diagramme avant la prose, tout document en HTML autonome illustré, au plus 4 paragraphes par visuel, auto-contrôle avant de livrer.</td>
+<td><code>~/.claude/output-styles/visuel-dabord.md</code>, lien vers le dépôt de config personnel</td>
+<td>clé <code>outputStyle</code> des settings ; relu au démarrage d'une session ; <code>keep-coding-instructions: true</code></td>
+<td><span class="tag adapt">à adapter</span> En français, cite des arbitrages datés et le chemin <code>~/workspace/**/docs/</code>. Pour partir : une version anglaise neutre, dans le dossier <code>output-styles/</code> d'un plugin.</td></tr>
+<tr><td><b>Règles de forme</b> <code>documentation.md</code>, <code>infographies.md</code>, <code>restituer.md</code>, <code>verification.md</code></td>
+<td>Le pourquoi et le coût mesuré : profondeur « poupée russe », dessiner d'abord, sobriété, texte ≥ 14 px affichés, regarder le rendu avant de livrer.</td>
+<td><code>~/.claude/rules/</code> (lien)</td>
+<td>chargées comme mémoire utilisateur, dans chaque session</td>
+<td><span class="tag own">propre</span> Voix de l'auteur, incidents datés. Un plugin ne livre pas de règles : la documentation renvoie à un skill (section 6).</td></tr>
+<tr><td><b><code>langue.md</code>, <code>cloisonnement.md</code></b></td>
+<td>Langue des documents (français) ; rien de professionnel sur une infrastructure personnelle.</td>
+<td><code>~/.claude/rules/</code></td><td>—</td>
+<td><span class="tag own">propre</span> Préférences de l'auteur ; n'entrent dans aucun paquet.</td></tr>
+<tr><td><b><code>~/.claude/CLAUDE.md</code></b></td>
+<td>La colle : renvoie aux règles et au style, « un seul siège par règle ».</td>
+<td>lien vers un chapeau du dépôt de config</td><td>—</td>
+<td><span class="tag own">propre</span></td></tr>
+<tr><td><b>Garde-fou</b> <code>visuel-livrable.py</code> + <code>visuel_commun.py</code></td>
+<td>Hook PostToolUse <code>Write|Edit|MultiEdit</code> : bloque (code 2) un livrable Markdown et un HTML sans <code>svg</code>, <code>img</code>, <code>table</code>, <code>canvas</code> ni mermaid ; avertit au-delà de 4 <code>&lt;p&gt;</code> par visuel.</td>
+<td><code>~/.claude/hooks/</code> (liens)</td>
+<td>python3, bibliothèque standard ; périmètre écrit en dur ; désarmé par <code>~/.claude/visuel-off</code> ou un commentaire de dérogation</td>
+<td><span class="tag adapt">à adapter</span> Périmètre et messages (français) en dur. Pour partir : hook de plugin, périmètre demandé à docpin.</td></tr>
+<tr><td><b>Tests du garde-fou</b></td>
+<td>Suite pytest du périmètre, de la dérogation et du verdict.</td>
+<td><code>~/.claude/sync/visuel/tests/test_visuel.py</code></td>
+<td><code>uv run --no-project --with pytest pytest</code></td>
+<td><span class="tag gen">généralisable</span> Partent avec le hook.</td></tr>
+<tr><td><b>Skill <code>epic-infographics</code></b> (plugin tiers, MIT, 0.2.0)</td>
+<td>Figure riche rendue en PNG : page HTML + SVG, préflight, rendu, relecture de sa propre image.</td>
+<td>marketplace GitHub tierce déclarée dans les settings ; copie dans <code>~/.claude/plugins/cache/epic-infographics/…</code></td>
+<td>node, Playwright 1.62.1 dans son propre <code>node_modules</code>, Chromium ; installation à la main : <code>npm install &amp;&amp; npx playwright install chromium</code></td>
+<td><span class="tag gen">généralisable</span> Public. Mais activé dans les settings locaux seulement : la synchro ne le porte pas (section 4).</td></tr>
+<tr><td><b>Ajout local <code>plancher-corps.mjs</code></b></td>
+<td>Mesure la taille calculée de chaque texte rendu, plancher 24 px.</td>
+<td>écrit le 2026-09-11 dans le cache du plugin, à côté de ses scripts</td>
+<td>le Playwright du plugin</td>
+<td><span class="tag own">propre</span> Perdu à la prochaine mise à jour du plugin, absent de la copie de la marketplace ; son seuil vient d'une version antérieure de <code>infographies.md</code> (aujourd'hui : 14 px affichés).</td></tr>
+<tr><td><b>Skill <code>dataviz</code></b></td>
+<td>Graphiques et palettes.</td>
+<td>livré avec Claude Code lui-même (skills intégrés, extraits par version)</td><td>—</td>
+<td><span class="tag gen">généralisable</span> Rien à empaqueter.</td></tr>
+<tr><td><b><code>~/.claude/settings.json</code></b></td>
+<td>Branche tout : <code>outputStyle</code>, les deux hooks PostToolUse, l'activation et la marketplace du skill d'infographies.</td>
+<td>fusion de <code>settings.shared.json</code> (synchronisé) et de clés propres à la machine</td>
+<td><code>install.sh</code>, qui fusionne</td>
+<td><span class="tag own">propre</span> Porte aussi du matériau professionnel (règles de permission, environnement du mode auto, un plugin local) : ne se livre jamais tel quel.</td></tr>
+<tr><td><b>Synchronisation de la config</b></td>
+<td>Amène règles, style, garde-fou et tests sur la deuxième machine.</td>
+<td><code>~/.claude/sync</code>, dépôt git personnel et privé : <code>install.sh</code> (liens + fusion des settings), <code>bootstrap.sh</code> (outillage, clones), hooks <code>sync-pull.sh</code> (SessionStart, fetch borné à 12 s) et <code>sync-push.sh</code> (Stop, pousse sans commiter)</td>
+<td>git, python3, une clé SSH</td>
+<td><span class="tag own">propre</span> Personnel et mêlé de matériau professionnel. Son mécanisme sert de modèle, pas de livrable.</td></tr>
+</tbody></table></div>
+
+<h3 class="side docpin">3b · Côté docpin — lecture du code</h3>
+<div class="scroll"><table class="inv">
+<thead><tr><th>Composant</th><th>Rôle</th><th>Où</th><th>Dépend de</th><th>Portée</th></tr></thead>
+<tbody>
+<tr><td><b>Hook <code>hooks/register-on-write.py</code></b></td>
+<td>PostToolUse <code>Write|Edit</code> : passe tout <code>.html</code> écrit à <code>annotate register --hook</code> (borné à 10 s) et relaie la consigne ; ne fait jamais échouer l'appel d'outil.</td>
+<td>branché par chemin absolu vers le clone, dans <code>~/.claude/settings.json</code></td>
+<td>python3 ; <code>annotate</code> sur le PATH, sinon <code>&lt;clone&gt;/.venv/bin/annotate</code></td>
+<td><span class="tag adapt">à adapter</span> Branchement à la main, chemin absolu. Pour partir : hook de plugin via <code>${CLAUDE_PLUGIN_ROOT}</code>.</td></tr>
+<tr><td><b>Règle « qu'est-ce qu'un document »</b> (<code>folders.py</code>)</td>
+<td>Une seule règle, demandée par le hook et par le parcours : les dossiers suivis. Par défaut, les <code>docs/</code> du dossier <code>ANNOTATE_WORKSPACE</code> ; un dossier ajouté suit tout <code>.html</code>, et seulement sous <code>~</code>.</td>
+<td><code>src/annotate/folders.py</code> ; <code>~/.local/share/annotate/folders.json</code></td><td>—</td>
+<td><span class="tag adapt">à adapter</span> Le défaut <code>~/workspace</code> est la disposition de l'auteur. Pour partir : pas de défaut, ou les <code>docs/</code> du dépôt de la session ; une commande que le garde-fou puisse consulter.</td></tr>
+<tr><td><b>Consigne et <code>annotate wait &lt;id&gt;</code></b></td>
+<td>Le hook dit à la session de lancer une commande d'arrière-plan ; elle tient un long-poll (<code>POST /api/docs/&lt;id&gt;/wait</code>, 25 s, reconnecte) et sa sortie, ce sont les notes : Claude Code réveille la conversation ouverte.</td>
+<td><code>cli.py</code> (<code>hook_output</code>, <code>cmd_wait</code>), <code>listeners.py</code>, <code>prompt.wait_command</code></td>
+<td>les commandes d'arrière-plan de Claude Code ; <code>CLAUDE_CODE_SESSION_ID</code> ; le chemin absolu de l'entrée du venv, <code>annotate</code> n'étant pas sur le PATH des sessions</td>
+<td><span class="tag adapt">à adapter</span> Le chemin absolu disparaît si <code>annotate</code> est sur le PATH (<code>uv tool install</code>, ou le <code>bin/</code> d'un plugin).</td></tr>
+<tr><td><b>Démon <code>annotate serve</code></b></td>
+<td>HTTP sur <code>127.0.0.1:8765</code> : page d'accueil, document servi avec l'overlay injecté (<code>annotate.js</code>, <code>&lt;base href&gt;</code>), API qui exige <code>X-Annotate</code>, une origine locale et un <code>Host</code> localhost.</td>
+<td><code>server.py</code>, <code>static/</code></td>
+<td>Python ≥ 3.12, bibliothèque standard seule</td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Registre et notes</b></td>
+<td><code>registry.json</code>, <code>annotations/&lt;id&gt;.json</code>, <code>forgotten.json</code>, <code>scan.json</code>, scripts d'onglet <code>launch/</code> ; jamais à côté du document.</td>
+<td><code>~/.local/share/annotate/</code> (<code>ANNOTATE_DATA_DIR</code>)</td><td>—</td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Parcours du démon</b></td>
+<td>Toutes les 30 s, ce que Bash écrit (<code>cp</code> depuis un scratchpad, sous-agents) ; l'auteur et le titre de la session sont retrouvés dans les transcripts.</td>
+<td><code>scanner.py</code>, <code>claude.writer_of</code>, <code>claude.title</code></td>
+<td>format non documenté des transcripts <code>~/.claude/projects/*/&lt;id&gt;.jsonl</code> (<code>"type":"user"</code>, <code>tool_use</code>, <code>sessionId</code>, <code>cwd</code>, <code>timestamp</code>, <code>custom-title</code>, <code>ai-title</code>)</td>
+<td><span class="tag gen">généralisable</span> Mais couplé à un format interne de Claude Code.</td></tr>
+<tr><td><b>Route A</b></td>
+<td>La session qui attend reçoit les notes, et rien d'autre ne s'ouvre.</td>
+<td><code>listeners.Board</code>, <code>sender.py</code></td><td>—</td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Route B : boîte de réception</b></td>
+<td>Session ouverte qui n'attend pas : les notes sont postées sur sa socket, derrière un dialogue Approve / Deny.</td>
+<td><code>inbox.py</code></td>
+<td>registre <code>~/.claude/sessions/&lt;pid&gt;.json</code> (<code>sessionId</code>, <code>pid</code>, <code>procStart</code>, <code>messagingSocketPath</code>) ; vivacité par <code>/proc/&lt;pid&gt;/stat</code>, champ 22 ; format de ligne non documenté, capturé sur la 2.1.289 et figé par <code>tests/test_inbox.py</code></td>
+<td><span class="tag adapt">à adapter</span> <code>/proc</code> est propre à Linux ; le format peut changer à chaque version de Claude Code.</td></tr>
+<tr><td><b>Route C : onglet de terminal</b></td>
+<td>Personne n'attend et la session est fermée : un onglet la reprend (<code>claude --resume</code>), ou en ouvre une neuve si elle a disparu.</td>
+<td><code>terminal.py</code>, <code>claude.resumable</code></td>
+<td><code>wt.exe -w 0 new-tab … -- wsl.exe -d &lt;distro&gt; -e bash -l &lt;script&gt;</code>, repli <code>cmd.exe /c start</code> ; distribution lue dans <code>WSL_DISTRO_NAME</code> ou <code>wslpath -w /</code></td>
+<td><span class="tag adapt">à adapter</span> Windows + WSL seulement. Pour partir : une commande d'onglet par plateforme, paramétrable.</td></tr>
+<tr><td><b>Ouverture du navigateur</b></td>
+<td><code>annotate open</code> et le bouton Open.</td>
+<td><code>browser.py</code></td>
+<td><code>wslview</code>, sinon <code>cmd.exe /c start</code>, sinon <code>explorer.exe</code></td>
+<td><span class="tag adapt">à adapter</span> Linux : <code>xdg-open</code> ; macOS : <code>open</code> ; ou le module <code>webbrowser</code>.</td></tr>
+<tr><td><b>Unité systemd</b></td>
+<td><code>annotate service</code> écrit l'unité : elle lance l'entrée du venv directement (jamais <code>uv run</code> : double SIGTERM mesuré), avec un PATH qui contient <code>claude</code>, <code>cmd.exe</code>, <code>explorer.exe</code>, <code>wt.exe</code> ; Restart et Stop depuis la page par <code>systemctl --user --no-block</code>.</td>
+<td><code>service.py</code> → <code>~/.config/systemd/user/annotate.service</code></td>
+<td>systemd utilisateur, <code>loginctl enable-linger</code>, et sous WSL <code>systemd=true</code></td>
+<td><span class="tag adapt">à adapter</span> Chemins du clone figés dans l'unité, description encore à l'ancien nom du projet ; macOS : launchd.</td></tr>
+<tr><td><b>Pastille Windows</b></td>
+<td>Icône de la zone de notification : couleur selon l'état, menu construit sur <code>/api/docs</code>, Start, Stop et Restart du service.</td>
+<td><code>tray.py</code>, <code>windows/tray.ps1</code> ; raccourci <code>annotate-tray.lnk</code> dans le dossier Démarrage</td>
+<td>PowerShell 5.1 + WinForms, <code>wslpath</code>, <code>WSL_DISTRO_NAME</code>, <code>wsl.exe … systemctl --user</code></td>
+<td><span class="tag adapt">à adapter</span> Windows seulement, et facultative : la page d'accueil porte tous les contrôles sauf Start.</td></tr>
+<tr><td><b>Le prompt envoyé</b></td>
+<td>Une section par note (titre de section, citation, mot cliqué, note), puis la consigne de corriger le fichier et de relancer <code>annotate wait</code>.</td>
+<td><code>prompt.py</code>, <code>htmldoc.py</code></td><td>—</td>
+<td><span class="tag gen">généralisable</span> Ce que fait ensuite la session dépend des règles de son utilisateur : chez l'auteur, elle commite et pousse.</td></tr>
+<tr><td><b>Installation</b></td>
+<td><code>uv sync</code> depuis un clone ; entrée <code>[project.scripts] annotate</code> ; construction hatchling ; aucune dépendance d'exécution.</td>
+<td><code>pyproject.toml</code>, <code>uv.lock</code></td><td>uv</td>
+<td><span class="tag adapt">à adapter</span> Pas encore publié (ROADMAP, « Packaging »). Pour partir : PyPI, puis <code>uv tool install docpin</code> ou <code>pipx install docpin</code>.</td></tr>
+<tr><td><b>Tests navigateur</b></td>
+<td><code>pytest -m browser</code> pilote un Chromium headless sur l'overlay et la page d'accueil.</td>
+<td><code>tests/test_browser.py</code></td>
+<td>node, et un dossier dont <code>node_modules</code> contient playwright, passé par <code>ANNOTATE_PLAYWRIGHT_DIR</code></td>
+<td><span class="tag adapt">à adapter</span> Ce Playwright n'est déclaré nulle part (3c).</td></tr>
+</tbody></table></div>
+
+<h3 class="side plat">3c · Côté plateforme et outillage</h3>
+<div class="scroll"><table class="inv">
+<thead><tr><th>Composant</th><th>Rôle</th><th>Où</th><th>Dépend de</th><th>Portée</th></tr></thead>
+<tbody>
+<tr><td><b>WSL2 <code>networkingMode=mirrored</code></b></td>
+<td>Le navigateur Windows atteint le <code>127.0.0.1</code> de WSL. Les URL données à Windows sont en <code>127.0.0.1</code>, jamais <code>localhost</code> : Windows essaie <code>::1</code> d'abord.</td>
+<td><code>%USERPROFILE%\.wslconfig</code></td><td>—</td>
+<td><span class="tag own">propre</span> Réglage de la machine ; sans objet hors WSL.</td></tr>
+<tr><td><b>systemd dans WSL</b></td>
+<td>Fait tourner l'unité du démon.</td>
+<td><code>/etc/wsl.conf</code>, section <code>[boot]</code>, <code>systemd=true</code></td><td>—</td>
+<td><span class="tag own">propre</span> Réglage de la machine.</td></tr>
+<tr><td><b><code>wt.exe</code></b></td>
+<td>Ouvre l'onglet de la route C.</td>
+<td><code>%LOCALAPPDATA%\Microsoft\WindowsApps\</code> — seul outil de ce dossier, d'où son ajout au PATH de l'unité</td><td>Windows Terminal</td>
+<td><span class="tag own">propre</span> Windows.</td></tr>
+<tr><td><b><code>wslpath</code>, <code>wsl.exe</code>, <code>powershell.exe</code>, <code>cmd.exe</code>, <code>explorer.exe</code></b></td>
+<td>Distribution, chemins Windows, onglet, pastille, ouverture du navigateur.</td>
+<td><code>/usr/bin/wslpath</code>, <code>/mnt/c/Windows/…</code></td><td>interopérabilité WSL</td>
+<td><span class="tag own">propre</span> WSL.</td></tr>
+<tr><td><b><code>claude</code></b></td>
+<td><code>claude --resume &lt;id&gt;</code> dans l'onglet, qui passe par <code>bash -l</code> pour avoir <code>~/.local/bin</code> sur son PATH.</td>
+<td><code>~/.local/bin/claude</code> (2.1.295 mesuré)</td><td><code>claude_bin</code> ou <code>ANNOTATE_CLAUDE</code></td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Python 3.12 et <code>uv</code></b></td>
+<td>Exécuter docpin, monter son environnement.</td>
+<td><code>/usr/bin/python3</code> (3.12.3), <code>~/.local/bin/uv</code> (0.10.8)</td><td>—</td>
+<td><span class="tag gen">généralisable</span> Sous macOS, le Python système est trop ancien : <code>uv python install</code>.</td></tr>
+<tr><td><b>node</b></td>
+<td>Skill d'infographies, captures, tests navigateur.</td>
+<td>node 22, installé par nvm</td><td>—</td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Playwright des captures</b></td>
+<td>Ce que les sessions utilisent pour capturer leurs documents, et ce que désigne <code>ANNOTATE_PLAYWRIGHT_DIR</code>.</td>
+<td>cache npx : <code>~/.npm/_npx/&lt;hash&gt;/node_modules/playwright</code> (1.49.1)</td>
+<td>npm, qui nettoie ce cache quand il veut</td>
+<td><span class="tag own">propre</span> Déclaré nulle part, éphémère.</td></tr>
+<tr><td><b>Playwright du skill</b></td>
+<td>Rendu PNG des infographies.</td>
+<td><code>node_modules</code> du dossier du skill (1.62.1)</td>
+<td>installé à la main : le <code>package.json</code> n'est pas à la racine du plugin, donc hors de l'installation automatique de Claude Code</td>
+<td><span class="tag gen">généralisable</span></td></tr>
+<tr><td><b>Chromium</b></td>
+<td>Navigateur des captures et des rendus.</td>
+<td><code>~/.cache/ms-playwright/</code> : deux builds (1148, 1234), un par version de Playwright, et leurs headless shells</td><td>Playwright</td>
+<td><span class="tag gen">généralisable</span> Linux natif : bibliothèques système (<code>npx playwright install-deps</code>).</td></tr>
+</tbody></table></div>
+
+<h3>3d · Écarté de l'inventaire, et pourquoi</h3>
+<div class="scroll"><table class="excl">
+<thead><tr><th>Hook ou plugin</th><th>Événement</th><th>Pourquoi il est écarté</th></tr></thead>
+<tbody>
+<tr><td><code>rtk-guard.sh</code></td><td>PreToolUse <code>Bash</code></td><td>Proxy qui compresse les sorties de commandes ; sans rapport avec les documents.</td></tr>
+<tr><td><code>pause-freeze.sh</code></td><td>PreToolUse <code>*</code></td><td>Fige toutes les sessions pendant une pause de la machine ; il retient aussi l'écriture d'un document, mais ne la façonne pas.</td></tr>
+<tr><td><code>confier-plafond.py</code></td><td>PreToolUse <code>Agent</code></td><td>Plafonne le modèle des exécutants d'un skill personnel ; sans rapport.</td></tr>
+<tr><td><code>travaux-photo.sh</code>, <code>pause-announce.sh</code></td><td>SessionStart</td><td>Photo des dépôts pour un gouverneur de clôture retiré, annonce d'une pause ; sans rapport.</td></tr>
+<tr><td><code>sync-pull.sh</code>, <code>sync-push.sh</code></td><td>SessionStart, Stop</td><td>Gardés, mais comme transport (ligne « Synchronisation » de 3a, et section 4), pas comme pièce de la boucle.</td></tr>
+<tr><td>plugins <code>superpowers</code>, un plugin professionnel local, <code>understand-anything</code> et <code>codex</code> (désactivés)</td><td><code>enabledPlugins</code></td><td>Méthode de travail générale, outillage d'employeur, plugins éteints : aucun ne touche aux documents.</td></tr>
+<tr><td>liens <code>tablette-noter.sh</code>, <code>tablette-deposer.sh</code></td><td>branchés nulle part</td><td>Résidus d'une ancienne montée vers une tablette : ils pointent vers des fichiers retirés du dépôt de config.</td></tr>
+</tbody></table></div>
+
+<details class="proof">
+<summary>Preuve — versions, dates et registre lus sur disque</summary>
+<pre>$ ls ~/.claude/plugins/cache/epic-infographics/epic-infographics/0.2.0/skills/epic-infographics/scripts
+2026-08-28 animate.mjs
+2026-08-28 check.mjs
+2026-09-11 plancher-corps.mjs      &lt;- ajout local, après l'installation
+2026-08-28 render.mjs
+$ ls ~/.claude/plugins/marketplaces/epic-infographics/skills/epic-infographics/scripts
+animate.mjs  check.mjs  render.mjs   &lt;- la copie de la marketplace ne l'a pas
+
+$ grep '"version"' ~/.npm/_npx/&lt;hash&gt;/node_modules/playwright/package.json
+  "version": "1.49.1",
+$ grep '"version"' …/skills/epic-infographics/node_modules/playwright/package.json
+  "version": "1.62.1",
+$ ls ~/.cache/ms-playwright/
+chromium-1148  chromium-1234  chromium_headless_shell-1148  chromium_headless_shell-1234  ffmpeg-1010  ffmpeg-1011
+
+$ grep -n 'First-time setup' …/skills/epic-infographics/SKILL.md
+155:First-time setup (once per machine): `npm install &amp;&amp; npx playwright install chromium`
+
+$ python3 -c '…clés d une entrée de ~/.claude/sessions/&lt;pid&gt;.json…'
+['bridgeSessionId', 'cwd', 'entrypoint', 'kind', 'messagingSocketPath', 'name', 'nameSince',
+ 'nameSource', 'peerFeatures', 'peerProtocol', 'pid', 'pidDomain', 'procStart', 'sessionId',
+ 'startedAt', 'status', 'statusUpdatedAt', 'updatedAt', 'version']
+
+$ which claude uv python3 wt.exe wslpath systemctl wslview      # anonymisé
+~/.local/bin/claude   ~/.local/bin/uv   /usr/bin/python3   %LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe
+/usr/bin/wslpath      /usr/bin/systemctl                  (wslview : absent, repli cmd.exe)</pre>
+</details>
+</div>
+
+<!-- ============================================================ 4 -->
+<h2 id="synchro">4 · Ce que la synchronisation transporte, et ce qu'elle oublie</h2>
+<div class="verdict"><strong>Affirmation :</strong> la deuxième machine reçoit les règles, le style et le
+garde-fou ; elle ne reçoit ni le hook docpin, ni le skill d'infographies, ni le service. La boucle n'y est
+donc pas branchée, et rien ne le signale.</div>
+<div class="l2">
+<div class="scroll"><table>
+<thead><tr><th>Pièce</th><th>Arrive sur l'autre machine ?</th><th>Par quel chemin</th></tr></thead>
+<tbody>
+<tr><td>Règles <code>~/.claude/rules/</code></td><td class="y">✓ oui</td><td>lien symbolique vers le dépôt de config, à jour au <code>git pull</code> de <code>sync-pull.sh</code></td></tr>
+<tr><td>Style <code>visuel-dabord</code></td><td class="y">✓ oui</td><td>lien, et <code>outputStyle</code> dans <code>settings.shared.json</code></td></tr>
+<tr><td>Garde-fou visuel et ses tests</td><td class="y">✓ oui</td><td>liens, et entrée PostToolUse dans <code>settings.shared.json</code></td></tr>
+<tr><td>Skill <code>epic-infographics</code></td><td class="n">✗ non</td><td>activation et marketplace écrites dans les settings locaux seulement</td></tr>
+<tr><td>Hook docpin</td><td class="n">✗ non</td><td>entrée ajoutée à la main dans <code>settings.json</code> le 2026-10-05 ; absente de <code>settings.shared.json</code></td></tr>
+<tr><td>Le code de docpin</td><td class="w">⚠ à la main</td><td>son propre dépôt : <code>git pull</code>, puis <code>uv sync</code> ; jamais tiré automatiquement</td></tr>
+<tr><td>Unité systemd, linger, pastille</td><td class="n">✗ non</td><td>à refaire : <code>annotate service</code>, <code>loginctl enable-linger</code>, <code>annotate tray</code></td></tr>
+<tr><td>Playwright et Chromium des captures</td><td class="n">✗ non</td><td>cache npx et cache de navigateurs : rien ne les déclare</td></tr>
+</tbody></table></div>
+<p>Ce dépôt de config ne peut pas servir de paquet : il est personnel, privé, et mêle à la configuration Claude du
+matériau professionnel (un chapeau de produit, des réglages propres au travail dans les settings). Son mécanisme —
+des liens symboliques, plus une fusion des settings qui ajoute sans jamais retirer — est un modèle de plus pour la
+commande <code>annotate install</code> de l'option (b), pas un livrable.</p>
+<details class="proof">
+<summary>Preuve — les comptes qui fondent les deux « non » du hook et du skill</summary>
+<pre>$ grep -c register-on-write ~/.claude/settings.json ~/.claude/settings.json.avant-annotate-20261005 \
+                            ~/.claude/sync/settings.shared.json
+settings.json:1
+settings.json.avant-annotate-20261005:0      &lt;- la sauvegarde d'avant l'ajout
+sync/settings.shared.json:0                  &lt;- la config partagée ne l'a jamais eu
+$ grep -c epic-infographics ~/.claude/settings.json ~/.claude/sync/settings.shared.json
+settings.json:2
+sync/settings.shared.json:0</pre>
+</details>
+</div>
+
+<!-- ============================================================ 5 -->
+<h2 id="plateformes">5 · Dépendances de plateforme</h2>
+<div class="verdict"><strong>Affirmation :</strong> le démon, le hook et les routes A et B sont du Python et du
+HTTP. Ce qui attache le projet à Windows : l'onglet, l'ouverture du navigateur, la pastille et le réseau de WSL.
+Ce qui l'attache à Linux : <code>/proc</code> et systemd.</div>
+<div class="l2">
+<div class="legend"><span class="y">✓ marche</span><span class="w">⚠ à écrire</span><span class="n">✗ pas d'équivalent connu sans dépendance</span><span class="u">? non mesuré</span></div>
+<div class="scroll"><table>
+<thead><tr><th>Dépendance</th><th>WSL2 + Windows (aujourd'hui)</th><th>Linux natif</th><th>macOS</th></tr></thead>
+<tbody>
+<tr><td>Démon HTTP sur <code>127.0.0.1</code></td><td><span class="y">✓</span> grâce à <code>networkingMode=mirrored</code></td><td><span class="y">✓</span> sans condition</td><td><span class="y">✓</span> sans condition</td></tr>
+<tr><td>Service au démarrage</td><td><span class="y">✓</span> systemd utilisateur + <code>systemd=true</code> + linger</td><td><span class="y">✓</span> même unité</td><td><span class="w">⚠</span> launchd : un <code>~/Library/LaunchAgents/*.plist</code> à générer</td></tr>
+<tr><td>Restart et Stop depuis la page</td><td><span class="y">✓</span> <code>systemctl --user --no-block</code></td><td><span class="y">✓</span></td><td><span class="w">⚠</span> <code>launchctl kickstart -k</code>, <code>launchctl bootout</code></td></tr>
+<tr><td>Ouvrir le navigateur</td><td><span class="y">✓</span> <code>wslview</code>, <code>cmd.exe /c start</code>, <code>explorer.exe</code></td><td><span class="w">⚠</span> <code>xdg-open</code>, ou <code>webbrowser</code></td><td><span class="w">⚠</span> <code>open</code>, ou <code>webbrowser</code></td></tr>
+<tr><td>Onglet de terminal (route C)</td><td><span class="y">✓</span> <code>wt.exe -w 0 new-tab</code> + <code>wsl.exe</code></td><td><span class="w">⚠</span> aucune commande universelle : <code>gnome-terminal --tab --</code>, <code>kitty @ launch --type=tab</code>, <code>wezterm cli spawn</code>, <code>tmux new-window</code>… à paramétrer</td><td><span class="w">⚠</span> <code>osascript</code> (Terminal, iTerm2) ou <code>open -a Terminal &lt;script&gt;.command</code></td></tr>
+<tr><td>Distribution et chemins Windows</td><td><span class="y">✓</span> <code>wslpath</code>, <code>WSL_DISTRO_NAME</code></td><td>sans objet</td><td>sans objet</td></tr>
+<tr><td>Pastille</td><td><span class="y">✓</span> PowerShell 5.1 + WinForms</td><td><span class="n">✗</span> AppIndicator ou StatusNotifier exigent GTK ou Qt</td><td><span class="n">✗</span> barre de menus : PyObjC, rumps ou SwiftBar</td></tr>
+<tr><td>Vivacité d'une session ouverte (route B)</td><td><span class="y">✓</span> <code>/proc/&lt;pid&gt;/stat</code>, champ 22</td><td><span class="y">✓</span> même code</td><td><span class="w">⚠</span> pas de <code>/proc</code> : <code>ps -o lstart=</code> ; <span class="u">?</span> ce que Claude Code écrit dans <code>procStart</code></td></tr>
+<tr><td>Boîte de réception (socket Unix)</td><td><span class="y">✓</span> mesuré</td><td><span class="u">?</span> même mécanisme supposé</td><td><span class="u">?</span> socket Unix disponible, rien de mesuré</td></tr>
+<tr><td>Transcripts <code>~/.claude/projects/</code></td><td><span class="y">✓</span></td><td><span class="y">✓</span> même emplacement</td><td><span class="u">?</span> supposé identique</td></tr>
+<tr><td><code>claude</code> et <code>--resume</code></td><td><span class="y">✓</span> <code>~/.local/bin</code> via <code>bash -l</code></td><td><span class="y">✓</span></td><td><span class="y">✓</span> le script de l'onglet appelle <code>bash</code>, présent</td></tr>
+<tr><td>Python ≥ 3.12, <code>uv</code></td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td><span class="w">⚠</span> Python système trop ancien : <code>uv python install</code></td></tr>
+<tr><td>Chromium pour les captures</td><td><span class="y">✓</span> Playwright</td><td><span class="y">✓</span> + <code>npx playwright install-deps</code></td><td><span class="y">✓</span></td></tr>
+<tr><td>Alt+clic dans le navigateur</td><td><span class="u">?</span> mesuré en Chromium headless sous Linux, pas dans Chrome sous Windows</td><td><span class="u">?</span></td><td><span class="u">?</span> Option+clic, rien de mesuré</td></tr>
+</tbody></table></div>
+</div>
+
+<!-- ============================================================ 6 -->
+<h2 id="plugin">6 · Ce qu'un plugin Claude Code peut porter</h2>
+<div class="verdict"><strong>Affirmation :</strong> hooks, skills, style de sortie, exécutables sur le PATH,
+options demandées à l'installation et dossier de données persistant : oui. Des règles, un
+<code>outputStyle</code> par défaut, un service système, l'installation d'un paquet Python : non.</div>
+<div class="l2">
+<div class="scroll"><table>
+<thead><tr><th>Pièce du workflow</th><th>Logement dans un plugin</th><th>Ce que dit la documentation</th></tr></thead>
+<tbody>
+<tr><td>Hook docpin, garde-fou visuel</td><td class="y">✓ <code>hooks/hooks.json</code></td><td>commande en <code>${CLAUDE_PLUGIN_ROOT}/…</code> ; les hooks sont enregistrés au chargement du plugin et se déclenchent dès lors</td></tr>
+<tr><td>Style de sortie</td><td class="y">✓ <code>output-styles/&lt;name&gt;.md</code></td><td>apparaît dans <code>/output-style</code> sous <code>&lt;plugin&gt;:&lt;name&gt;</code> ; <code>force-for-plugin: true</code> l'impose et écrase le <code>outputStyle</code> de l'utilisateur</td></tr>
+<tr><td>Règles de forme</td><td class="n">✗ pas de logement</td><td>un <code>CLAUDE.md</code> à la racine du plugin n'est pas chargé : « put them in a skill »</td></tr>
+<tr><td>Un skill « écrire un document annotable »</td><td class="y">✓ <code>skills/&lt;name&gt;/SKILL.md</code></td><td>chargé à la demande ; Claude Code substitue <code>${CLAUDE_PLUGIN_ROOT}</code> dans son texte au chargement</td></tr>
+<tr><td><code>annotate</code> sur le PATH</td><td class="y">✓ <code>bin/</code></td><td>sur le PATH du shell de l'outil Bash, après celui de l'utilisateur — pas sur celui d'une unité systemd</td></tr>
+<tr><td><code>outputStyle</code> par défaut</td><td class="n">✗</td><td>un <code>settings.json</code> de plugin ne retient que <code>agent</code> et <code>subagentStatusLine</code></td></tr>
+<tr><td>L'environnement Python de docpin</td><td class="w">⚠ par un hook</td><td>aucune installation Python automatique ; la doc renvoie à un hook qui installe dans <code>${CLAUDE_PLUGIN_DATA}</code>. docpin n'ayant aucune dépendance, <code>python3 -m annotate.cli</code> suffirait</td></tr>
+<tr><td>Dépendance au skill d'infographies</td><td class="y">✓ <code>dependencies</code></td><td>un plugin peut en exiger un autre, d'une autre marketplace comprise ; pas un programme externe</td></tr>
+<tr><td>Unité systemd, launchd, raccourci Démarrage</td><td class="n">✗</td><td>hors du périmètre d'un plugin : à écrire par une commande que l'utilisateur lance</td></tr>
+<tr><td>Remplacer la consigne <code>annotate wait</code></td><td class="w">⚠ <code>monitors/monitors.json</code></td><td>expérimental : une commande de fond pour toute la session, sa sortie arrive en notifications ; jamais en <code>-p</code></td></tr>
+<tr><td>Port, dossier suivi par défaut</td><td class="y">✓ <code>userConfig</code></td><td>dialogue à l'installation, valeurs exportées aux hooks en <code>CLAUDE_PLUGIN_OPTION_&lt;KEY&gt;</code></td></tr>
+<tr><td>Marketplace dans le dépôt docpin</td><td class="y">✓ <code>.claude-plugin/marketplace.json</code></td><td>à côté de <code>plugin.json</code>, une entrée dont <code>source</code> vaut <code>"./"</code></td></tr>
+</tbody></table></div>
+<div class="warn"><strong>Piège à connaître avant de choisir :</strong> <code>${CLAUDE_PLUGIN_ROOT}</code> pointe sur le
+dossier d'une version, qui change à chaque mise à jour, et l'ancien dossier est supprimé 14 jours plus tard. Une
+unité systemd, ou un démon lancé à la demande, qui tournerait depuis ce dossier servirait des fichiers
+(<code>static/annotate.js</code>, la page d'accueil) qui disparaissent deux semaines après une mise à jour.</div>
+<details class="proof">
+<summary>Preuve — les passages de la documentation officielle, lus le 2026-10-09</summary>
+<blockquote>« Files in <code>bin/</code> at the plugin root are on the <code>PATH</code> of the Bash tool's shell while the plugin is
+enabled […] Plugin <code>bin/</code> directories come after the user's own <code>PATH</code> entries. » — « Two keys take effect,
+<code>agent</code> and <code>subagentStatusLine</code>, and every other key is dropped. » — « A monitor is a shell command that runs
+in the background for the whole session. What it prints reaches Claude as notifications. »<br>
+<a href="https://code.claude.com/docs/en/plugins/components">code.claude.com/docs/en/plugins/components</a></blockquote>
+<blockquote>« <code>force-for-plugin</code> — Plugin output styles only. Set to <code>true</code> to apply this style automatically
+whenever the plugin is enabled, without requiring users to select it. Overrides the user's <code>outputStyle</code>
+setting. If multiple enabled plugins set this, Claude Code uses the first one loaded. »<br>
+<a href="https://code.claude.com/docs/en/output-styles">code.claude.com/docs/en/output-styles</a></blockquote>
+<blockquote>« A <code>CLAUDE.md</code> at the plugin root isn't loaded as context […] To include instructions that load into
+Claude's context, put them in a skill. » — « <code>dependencies</code> : Plugins that must be enabled for this one to
+work. » — « <code>${CLAUDE_PLUGIN_ROOT}</code> changes when the plugin updates, so don't write state there. »<br>
+<a href="https://code.claude.com/docs/en/plugins/manifest-reference">code.claude.com/docs/en/plugins/manifest-reference</a></blockquote>
+<blockquote>« When the automatic install can't provide a dependency, install it from a hook into the persistent data
+directory. That includes […] Python dependencies. » — « Because <code>${CLAUDE_PLUGIN_ROOT}</code> points at a version
+directory, a plugin's root path changes with every version. » — « It removes that directory in a background
+cleanup 14 days later. »<br>
+<a href="https://code.claude.com/docs/en/plugins/loading">code.claude.com/docs/en/plugins/loading</a></blockquote>
+<blockquote>« To publish from the plugin's own repository, save the marketplace file beside <code>plugin.json</code> in
+<code>.claude-plugin/</code>, with one entry whose <code>source</code> is <code>"./"</code>, the repository root. » — et, pour un outil qui
+a son propre installeur : « have your installer or post-install message run or print the two commands a user
+needs ».<br>
+<a href="https://code.claude.com/docs/en/plugins/publish">code.claude.com/docs/en/plugins/publish</a></blockquote>
+</details>
+</div>
+
+<!-- ============================================================ 7 -->
+<h2 id="options">7 · Les options d'empaquetage</h2>
+<div class="verdict"><strong>Affirmation :</strong> l'option (e) — le dépôt docpin devient sa propre marketplace —
+est la seule qui branche le hook sans toucher aux settings et n'a qu'un canal de mise à jour ; composée avec (c),
+elle laisse la forme visuelle optionnelle. Aucune ne règle seule le service.</div>
+<div class="l2">
+<div class="legend"><span class="y">✓ oui</span><span class="w">⚠ en partie, ou avec un coût</span><span class="n">✗ non</span></div>
+<div class="scroll"><table class="matrix">
+<thead><tr><th>Option</th><th>Gestes</th><th>Hook sans éditer les settings</th><th>Forme livrée</th><th>Démon</th><th>Mises à jour</th><th>Zéro dépendance</th><th>Rien de perso</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td><b>(a)</b> plugin Claude Code + docpin installé à part (<code>uv tool</code>, <code>pipx</code>)</td><td>3 commandes + <code>annotate service</code></td><td><span class="y">✓</span></td><td><span class="y">✓</span> si livrée</td><td><span class="w">⚠</span> à la main</td><td><span class="w">⚠</span> deux canaux, qui peuvent diverger</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td>moyen : manifeste, <code>hooks.json</code>, PyPI</td></tr>
+<tr><td><b>(b)</b> docpin seul + <code>annotate install</code></td><td>2</td><td><span class="w">⚠</span> écrit dans <code>settings.json</code></td><td><span class="n">✗</span></td><td><span class="y">✓</span></td><td><span class="y">✓</span> un canal</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td>moyen : fusion JSON idempotente, et la désinstallation</td></tr>
+<tr><td><b>(c)</b> deux paquets qui composent : forme visuelle, boucle de retour</td><td>2 plugins + 1 paquet</td><td><span class="y">✓</span></td><td><span class="y">✓</span> séparable</td><td><span class="w">⚠</span> à la main</td><td><span class="y">✓</span> par paquet</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td>le plus haut : deux paquets, deux notices</td></tr>
+<tr><td><b>(d)</b> script d'installation tout-en-un</td><td>1</td><td><span class="w">⚠</span> écrit dans les settings</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td><span class="n">✗</span> relancer le script</td><td><span class="y">✓</span></td><td><span class="w">⚠</span> tentation de recopier la config perso</td><td>faible, puis de la dette</td></tr>
+<tr><td><b>(e)</b> le dépôt docpin = marketplace + plugin qui embarque docpin</td><td>2 : <code>marketplace add</code>, <code>install</code></td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td><span class="w">⚠</span> à la demande, jamais depuis <code>${CLAUDE_PLUGIN_ROOT}</code></td><td><span class="y">✓</span> un canal</td><td><span class="y">✓</span> python3 ≥ 3.12 requis</td><td><span class="y">✓</span></td><td>moyen</td></tr>
+<tr><td><b>(f)</b> statu quo : README et étapes manuelles</td><td>≈ 8</td><td><span class="n">✗</span> chemin absolu à la main</td><td><span class="n">✗</span></td><td><span class="y">✓</span> manuel</td><td><span class="w">⚠</span> <code>git pull</code>, <code>uv sync</code>, unité à régénérer</td><td><span class="y">✓</span></td><td><span class="y">✓</span></td><td>nul</td></tr>
+</tbody></table></div>
+<div class="split">
+  <div>
+    <p>Lecture de la matrice : (b) et (d) écrivent dans le fichier de settings de l'utilisateur, qui chez l'auteur est
+    lui-même produit par une fusion ; deux écrivains sur un même fichier, c'est la classe de défaut que sa synchro
+    a déjà payée (une commande en double après une fusion, 2026-09-08). (a) et (e) passent par le mécanisme que
+    Claude Code prévoit pour cela.</p>
+    <p>L'assemblage proposé garde la config de l'auteur au-dessus de tout : elle continue de porter son style
+    français et ses règles, qui priment sur le style anglais neutre du plugin de forme.</p>
+  </div>
+  <figure class="narrowfig">
+  <svg viewBox="0 0 420 540" role="img" aria-labelledby="a-t">
+    <title id="a-t">Assemblage proposé : config personnelle, deux plugins, un paquet Python, des adaptateurs de plateforme</title>
+    <defs><marker id="a-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <rect x="20" y="12" width="380" height="96" rx="10" class="box dash" stroke="var(--claude)"/>
+    <text x="36" y="40" class="s19b">Config personnelle</text>
+    <text x="36" y="67" class="s18">style français, règles, synchro</text>
+    <text x="36" y="93" class="s18 mut">reste personnelle, et prime</text>
+    <path d="M300,108 V132" class="arr" stroke="var(--muted)" marker-end="url(#a-a)"/>
+    <text x="312" y="127" class="s18 mut">surcharge</text>
+    <rect x="20" y="136" width="380" height="150" rx="12" fill="none" stroke="var(--docpin)" stroke-width="2" class="dash"/>
+    <text x="36" y="160" class="s18" style="fill: var(--docpin)">marketplace : le dépôt docpin</text>
+    <rect x="34" y="172" width="170" height="102" rx="10" class="box" stroke="var(--docpin)"/>
+    <text x="48" y="200" class="s19b">docpin</text>
+    <text x="48" y="226" class="s18">hook, skill,</text>
+    <text x="48" y="251" class="s18">bin/annotate</text>
+    <rect x="216" y="172" width="170" height="102" rx="10" class="box" stroke="var(--claude)"/>
+    <text x="230" y="200" class="s19b">forme</text>
+    <text x="230" y="226" class="s18">style, garde-fou</text>
+    <text x="230" y="251" class="s18 mut">optionnel</text>
+    <path d="M119,274 V310" class="arr" stroke="var(--muted)" marker-end="url(#a-a)"/>
+    <text x="132" y="306" class="s18 mut">appelle</text>
+    <rect x="20" y="314" width="380" height="96" rx="10" class="box" stroke="var(--docpin)"/>
+    <text x="36" y="342" class="s19b">Paquet Python docpin</text>
+    <text x="36" y="369" class="s18 mono">uv tool install docpin</text>
+    <text x="36" y="395" class="s18">serve, register, wait</text>
+    <path d="M210,410 V434" class="arr" stroke="var(--muted)" marker-end="url(#a-a)"/>
+    <rect x="20" y="438" width="380" height="96" rx="10" class="box" stroke="var(--plat)"/>
+    <text x="36" y="466" class="s19b">Adaptateurs de plateforme</text>
+    <text x="36" y="493" class="s18">systemd, launchd, à la demande</text>
+    <text x="36" y="519" class="s18">wt.exe, modèle de commande</text>
+  </svg>
+  <figcaption>Proposition, pas décision : les noms des plugins sont provisoires, et la question 2 en énumère les
+  variantes.</figcaption>
+  </figure>
+</div>
+</div>
+
+<!-- ============================================================ 8 -->
+<h2 id="generaliser">8 · Ce qu'il faudrait généraliser</h2>
+<div class="verdict"><strong>Affirmation :</strong> douze valeurs écrites en dur, chacune avec ce qui la
+remplacerait. Aucune n'oblige à renoncer à l'invariant « aucune dépendance d'exécution ».</div>
+<div class="l2">
+<div class="scroll"><table>
+<thead><tr><th>Écrit en dur aujourd'hui</th><th>Où</th><th>Ce qui le remplacerait</th></tr></thead>
+<tbody>
+<tr><td><code>~/workspace</code> comme dossier suivi par défaut</td><td><code>config.workspace</code>, <code>folders._default</code></td><td>aucun défaut, ou les <code>docs/</code> du dépôt de la session ; une option <code>userConfig</code></td></tr>
+<tr><td><code>~/workspace/**/docs/</code> et <code>~/.claude/sync/docs/</code></td><td><code>visuel_commun.est_couvert</code></td><td>demander à docpin si ce chemin est un document : une règle, un endroit</td></tr>
+<tr><td>chemin absolu du clone dans les settings</td><td><code>~/.claude/settings.json</code></td><td><code>${CLAUDE_PLUGIN_ROOT}/hooks/register-on-write.py</code></td></tr>
+<tr><td>chemin absolu du venv dans la consigne</td><td><code>config.annotate_command</code></td><td><code>annotate</code> sur le PATH : <code>uv tool</code>, ou <code>bin/</code> du plugin</td></tr>
+<tr><td><code>wt.exe … wsl.exe -d &lt;distro&gt;</code></td><td><code>terminal.command</code></td><td>un modèle de commande dans <code>config.toml</code>, avec un défaut par plateforme</td></tr>
+<tr><td><code>wslview</code>, <code>cmd.exe</code>, <code>explorer.exe</code></td><td><code>browser.openers</code></td><td><code>xdg-open</code>, <code>open</code>, ou <code>webbrowser</code> de la bibliothèque standard</td></tr>
+<tr><td><code>/proc/&lt;pid&gt;/stat</code></td><td><code>inbox._proc_start</code></td><td>une fonction par plateforme, à mesurer contre ce que Claude Code écrit dans <code>procStart</code></td></tr>
+<tr><td>une unité systemd seulement, chemins du clone figés, description à l'ancien nom</td><td><code>service.unit_text</code></td><td>systemd ou launchd, pointant sur une installation stable — jamais sur <code>${CLAUDE_PLUGIN_ROOT}</code></td></tr>
+<tr><td>style et messages du garde-fou en français</td><td><code>visuel-dabord.md</code>, <code>visuel-livrable.py</code></td><td>anglais dans le paquet public ; la version française reste personnelle et prime</td></tr>
+<tr><td>seuils : 4 paragraphes par visuel, 14 px affichés</td><td><code>PROSE_PAR_VISUEL</code>, prose de <code>infographies.md</code></td><td>paramètres documentés du plugin de forme</td></tr>
+<tr><td>le Playwright du cache npx</td><td><code>ANNOTATE_PLAYWRIGHT_DIR</code></td><td>une dépendance de développement déclarée, avec son lockfile, pour les tests navigateur</td></tr>
+<tr><td><code>plancher-corps.mjs</code> dans le cache d'un plugin tiers</td><td>cache du plugin</td><td>le proposer en amont, ou le versionner avec le garde-fou</td></tr>
+</tbody></table></div>
+</div>
+
+<!-- ============================================================ 9 -->
+<h2 id="questions">9 · Questions à arbitrer</h2>
+<div class="verdict"><strong>Affirmation :</strong> neuf décisions, chacune avec ses issues et une
+recommandation. Aucune n'est prise ici.</div>
+<div class="l2">
+
+<div class="q"><h3>Q1 · Que contient le paquet public ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>la boucle seule (docpin + hook)</td><td>le plus petit livrable</td><td>l'utilisateur doit déjà faire écrire du HTML à ses sessions, sinon il n'y a rien à annoter</td></tr>
+<tr><td>la boucle + un skill « écrire un document HTML annotable dans <code>docs/</code> »</td><td>une session sait quoi produire, et où</td><td>un skill à écrire, en anglais neutre</td></tr>
+<tr><td>la boucle + skill + style + garde-fou</td><td>l'expérience complète de l'auteur</td><td>impose une forme que tout le monde ne veut pas</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> la deuxième dans le plugin docpin ; le style et le garde-fou dans un
+second plugin, optionnel (Q2).</div></div>
+
+<div class="q"><h3>Q2 · Quelle forme de livraison ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>(a) plugin + paquet PyPI à part</td><td>chaque outil sur son canal habituel</td><td>deux versions à garder alignées</td></tr>
+<tr><td>(b) <code>annotate install</code></td><td>un seul paquet</td><td>écrit dans les settings de l'utilisateur, et doit savoir les défaire</td></tr>
+<tr><td>(e) le dépôt docpin comme marketplace</td><td>deux commandes, un canal, aucune édition de settings</td><td>lié au système de plugins de Claude Code</td></tr>
+<tr><td>(f) statu quo</td><td>rien à faire</td><td>huit gestes, et un chemin absolu dans les settings</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> (e), avec deux entrées dans la marketplace (docpin, forme visuelle) ;
+la publication PyPI ensuite, pour qui n'utilise pas les plugins.</div></div>
+
+<div class="q"><h3>Q3 · Le style de sortie : imposé ou choisi ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td><code>force-for-plugin: true</code></td><td>actif sans aucun geste</td><td>écrase le <code>outputStyle</code> de l'utilisateur ; un seul plugin à la fois peut le faire</td></tr>
+<tr><td>sélectionnable, <code>/output-style &lt;plugin&gt;:&lt;nom&gt;</code></td><td>l'utilisateur garde la main</td><td>un geste de plus ; et toujours pas les sous-agents</td></tr>
+<tr><td>pas de style, un skill seulement</td><td>rien ne change les autres réponses</td><td>chargé seulement quand la tâche s'y prête</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> sélectionnable, jamais imposé ; chez l'auteur, son style français
+reste celui de ses settings.</div></div>
+
+<div class="q"><h3>Q4 · Où vit la règle « qu'est-ce qu'un document » ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>deux copies, comme aujourd'hui</td><td>rien à faire</td><td>elles ont déjà divergé : le garde-fou ne voit pas les dossiers ajoutés dans docpin</td></tr>
+<tr><td>le garde-fou demande à docpin</td><td>une règle, un endroit</td><td>le garde-fou dépend de docpin quand il est présent ; repli sur <code>docs/</code> sinon</td></tr>
+<tr><td>un fichier de configuration commun</td><td>deux outils indépendants</td><td>un format partagé à maintenir, deux lecteurs</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> le garde-fou demande à docpin quand il est installé, et retombe sur
+les <code>docs/</code> sinon.</div></div>
+
+<div class="q"><h3>Q5 · Comment le démon démarre-t-il ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>un service (systemd, launchd à écrire)</td><td>tourne même sans session : page d'accueil, pastille</td><td>une installation par système, et le linger</td></tr>
+<tr><td>à la demande : un hook SessionStart le lance s'il ne répond pas</td><td>rien à installer</td><td>s'il tourne depuis le dossier d'une version du plugin, ses fichiers disparaissent 14 jours après une mise à jour : il faut le relancer quand la version change</td></tr>
+<tr><td>les deux</td><td>le meilleur des deux</td><td>deux chemins à tester</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> les deux, le service restant un choix explicite
+(<code>annotate service</code>) ; le démarrage à la demande compare la version du démon qui répond.</div></div>
+
+<div class="q"><h3>Q6 · Quelles plateformes au premier jour ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>WSL seul</td><td>ce qui est mesuré</td><td>exclut tout Linux natif, pour trois adaptateurs</td></tr>
+<tr><td>WSL + Linux natif</td><td>même code de service et de vivacité</td><td>un modèle de commande d'onglet, <code>xdg-open</code></td></tr>
+<tr><td>WSL + Linux + macOS</td><td>le public le plus large</td><td>launchd, <code>/proc</code> à remplacer, onglet par AppleScript, et rien de mesuré</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> WSL et Linux natif ; macOS annoncé « non testé » tant que personne ne
+l'a mesuré ; la pastille reste Windows, et facultative.</div></div>
+
+<div class="q"><h3>Q7 · La route B, au format non documenté, dans le paquet public ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>activée</td><td>plus d'onglet en double sur une session ouverte</td><td>peut casser à une version de Claude Code — mais l'échec est sûr : les notes restent à envoyer, aucun onglet</td></tr>
+<tr><td>désactivée par défaut</td><td>rien de non documenté n'est sollicité</td><td>le défaut corrigé le 2026-10-06 revient : une session ouverte reçoit son double dans un onglet</td></tr>
+<tr><td>retirée</td><td>moins de code</td><td>idem, sans retour possible par réglage</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> activée, dite fragile dans le README, et le test qui fige le format
+rejoué à chaque version de Claude Code.</div></div>
+
+<div class="q"><h3>Q8 · La consigne <code>annotate wait</code>, ou un monitor de plugin ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>garder la consigne</td><td>marche, mesuré depuis le 2026-10-05</td><td>un paragraphe de contexte par document, et la session doit obéir</td></tr>
+<tr><td>un monitor (expérimental)</td><td>plus de consigne, rien à relancer après chaque envoi</td><td>expérimental, absent en <code>-p</code>, et rien ne dit qu'il reçoive l'id de la session</td></tr>
+<tr><td>les deux</td><td>le monitor là où il existe</td><td>deux chemins de livraison à garder cohérents</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> garder la consigne ; essayer le monitor sur une branche, et mesurer ce
+qu'il reçoit, avant d'en dépendre.</div></div>
+
+<div class="q"><h3>Q9 · Et la config de l'auteur, en attendant ?</h3>
+<div class="scroll"><table>
+<thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td>inchangée</td><td>rien à faire</td><td>la deuxième machine n'a pas la boucle (section 4)</td></tr>
+<tr><td>ajouter le hook et le skill d'infographies à la config synchronisée</td><td>deux machines pareilles dès demain</td><td>un chemin absolu dans un fichier partagé, faux sur une machine où le clone n'est pas au même endroit</td></tr>
+<tr><td>installer le plugin public, comme tout le monde</td><td>l'auteur éprouve ce qu'il livre</td><td>attendre que le plugin existe</td></tr>
+</tbody></table></div>
+<div class="reco"><strong>Recommandation :</strong> le plugin public dès qu'il existe ; d'ici là, l'ajout à la config
+synchronisée, en sachant qu'il suppose le clone au même chemin sur les deux machines.</div></div>
+</div>
+
+<!-- ============================================================ 10 -->
+<h2 id="mesure">10 · Mesuré, lu, supposé</h2>
+<div class="verdict"><strong>Affirmation :</strong> ce document s'appuie sur des fichiers lus et quelques comptes ;
+ce qu'il dit des plugins est lu dans la documentation, pas essayé.</div>
+<div class="l2">
+<div class="scroll"><table>
+<thead><tr><th>Affirmation</th><th>Statut</th><th>Sur quoi elle repose</th></tr></thead>
+<tbody>
+<tr><td>Le hook docpin et le skill d'infographies manquent à la config synchronisée</td><td class="y">mesuré</td><td>comptes <code>grep -c</code>, section 4</td></tr>
+<tr><td>Un plugin porte hooks, skills, style, <code>bin/</code>, <code>userConfig</code>, données persistantes ; ni règles ni <code>outputStyle</code> par défaut</td><td class="w">lu</td><td>documentation officielle, 2026-10-09 ; rien n'a été construit ni essayé</td></tr>
+<tr><td>Le style ne s'applique pas aux sous-agents</td><td class="w">lu</td><td>page « Output styles » ; non mesuré sur cette machine</td></tr>
+<tr><td>Le <code>bin/</code> d'un plugin n'est pas sur le PATH d'une unité systemd</td><td class="w">lu</td><td>la doc ne le promet qu'au shell de l'outil Bash</td></tr>
+<tr><td>Les hooks PostToolUse se déclenchent sur les écritures d'un sous-agent</td><td class="u">non mesuré</td><td>—</td></tr>
+<tr><td>La route B sous Linux natif et sous macOS</td><td class="u">non mesuré</td><td>même code supposé ; valeur de <code>procStart</code> sous macOS inconnue</td></tr>
+<tr><td>Un monitor de plugin reçoit l'id de la session</td><td class="u">non vérifié</td><td>—</td></tr>
+<tr><td>Alt+clic dans Chrome sous Windows, Option+clic sous macOS</td><td class="u">non mesuré</td><td>README, « Status »</td></tr>
+</tbody></table></div>
+<p class="lede" style="margin-top: 14px">Sources :<a href="https://code.claude.com/docs/en/plugins/components">plugins/components</a> ·
+<a href="https://code.claude.com/docs/en/plugins/manifest-reference">plugins/manifest-reference</a> ·
+<a href="https://code.claude.com/docs/en/plugins/loading">plugins/loading</a> ·
+<a href="https://code.claude.com/docs/en/plugins/publish">plugins/publish</a> ·
+<a href="https://code.claude.com/docs/en/output-styles">output-styles</a> ·
+<a href="https://code.claude.com/docs/en/cross-session-messaging">cross-session-messaging</a> (citée par
+<code>inbox.py</code>). Pour le code : README, ROADMAP, CLAUDE.md et <code>src/annotate/</code> de ce dépôt.</p>
+</div>
+</main>
+<script>
+(function () {
+  var body = document.body;
+  var buttons = document.querySelectorAll('.levels button');
+  function setLevel(level) {
+    body.setAttribute('data-level', level);
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.level === level ? 'true' : 'false'); });
+    document.querySelectorAll('details.proof').forEach(function (d) { d.open = level === '3'; });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { setLevel(b.dataset.level); }); });
+  // Stacked tables on narrow screens: each cell carries its column name.
+  document.querySelectorAll('table').forEach(function (t) {
+    var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (h) { return h.textContent.trim(); });
+    t.querySelectorAll('tbody tr').forEach(function (r) {
+      Array.prototype.forEach.call(r.children, function (c, i) { if (heads[i]) { c.setAttribute('data-label', heads[i]); } });
+    });
+  });
+})();
+</script>
+</body>
+</html>
