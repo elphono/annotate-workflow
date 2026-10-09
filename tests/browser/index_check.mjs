@@ -36,8 +36,15 @@ try {
   step('grouped by session, unknown last: ' + JSON.stringify(heads));
   const group = (title) => page.locator('#groups section', { has: page.locator('h2', { hasText: title }) });
   const row = (title) => page.locator('.doc', { hasText: title });
-  if (await group('Live session').locator('.group-head .badge.live').count() !== 1) fail('no open badge on Live session');
-  if (await group('Other session').locator('.group-head .badge.live').count() !== 0) fail('Other session shown open');
+  const kicker = async (title) => (await group(title).locator('.group-kicker').textContent()).trim();
+  if (await kicker('Live session') !== 'Open session' ||
+      !(await group('Live session').evaluate((node) => node.classList.contains('open')))) {
+    fail('Live session not marked open');
+  }
+  if (await kicker('Other session') !== 'Session' ||
+      await group('Other session').evaluate((node) => node.classList.contains('open'))) {
+    fail('Other session shown open');
+  }
   step('the open session is marked open, the other one is not');
   if (!(await row('Alpha').locator('.badge.live').count())) fail('no listening badge on Alpha');
   const classes = {};

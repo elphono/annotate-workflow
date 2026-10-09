@@ -240,30 +240,52 @@
     return row;
   }
 
+  const ICONS = {
+    // a speech bubble: a conversation; the same bubble struck through: none known
+    session: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+    unknown: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 9l6 6"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    id: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+    doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  };
+
+  function icon(name) {
+    const span = make('span', 'icon');
+    span.setAttribute('aria-hidden', 'true');
+    span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round" stroke-linejoin="round">' + ICONS[name] + '</svg>';
+    return span.firstChild;
+  }
+
+  function chip(name, text, cls, title) {
+    const node = make('span', 'chip' + (cls ? ' ' + cls : ''));
+    node.append(icon(name), text);
+    if (title) node.title = title;
+    return node;
+  }
+
   function groupCard(group, docs) {
     const known = Boolean(group.session_id);
-    const section = make('section', 'card group' + (known ? '' : ' unknown'));
+    const section = make('section', 'card group' + (known ? '' : ' unknown')
+      + (group.open ? ' open' : ''));
     section.dataset.session = group.session_id;
     const head = make('header', 'group-head');
-    const titleLine = make('div', 'group-title');
-    titleLine.append(make('h2', '', group.title));
-    if (group.open) {
-      const badge = make('span', 'badge live', 'open');
-      badge.title = 'The session is open: Send to session posts into it';
-      titleLine.append(badge);
-    }
+    const badge = make('span', 'group-icon');
+    badge.append(icon(known ? 'session' : 'unknown'));
+    const kicker = make('div', 'group-kicker',
+      !known ? 'No known session' : group.open ? 'Open session' : 'Session');
+    if (group.open) kicker.title = 'The session is open: Send to session posts into it';
     const meta = make('div', 'group-meta');
     if (known) {
       const folder = docs.length && docs[0].cwd ? tilde(docs[0].cwd) : group.folder;
-      const id = make('span', 'mono id', group.session_id.slice(0, 8));
-      id.title = group.session_id;
-      if (folder) meta.append(make('span', 'mono', folder), ' · ');
-      meta.append('session ', id, ' · ' + plural(docs.length, 'document'));
+      if (folder) meta.append(chip('folder', folder, 'mono', 'The folder the session runs in'));
+      meta.append(chip('id', group.session_id.slice(0, 8), 'mono', group.session_id));
+      meta.append(chip('doc', plural(docs.length, 'document')));
     } else {
       meta.textContent = 'Attach each one to its conversation: otherwise Send to session ' +
         'opens a new one.';
     }
-    head.append(titleLine, meta);
+    head.append(badge, kicker, make('h2', '', group.title), meta);
     section.append(head);
     for (const doc of docs) section.append(docRow(doc));
     return section;
