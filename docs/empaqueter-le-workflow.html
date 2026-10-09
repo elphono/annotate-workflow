@@ -172,17 +172,17 @@ faudrait pour que quelqu'un d'autre installe le tout.</p>
 <div class="verdict"><strong>En une phrase :</strong> la boucle elle-même (docpin) part presque telle quelle,
 et depuis le 2026-10-09 elle est aussi branchée sur la deuxième machine. Ce qui ne part pas encore : la manière
 de pousser une session à dessiner, dispersée dans la config de l'auteur en 13 pièces qui se répètent, et ce
-qui suppose Windows. Six questions sont tranchées par l'auteur, quatre sont tranchées ici comme décisions
-techniques, une seule reste à arbitrer.</div>
+qui suppose Windows. Sept questions sont tranchées par l'auteur, quatre sont tranchées ici comme décisions
+techniques ; aucune ne reste ouverte.</div>
 
 <div class="tiles">
   <div class="tile"><b>36</b><span>pièces inventoriées, chacune lue sur disque</span></div>
   <div class="tile own"><b>11</b><span>propres à l'auteur ou à sa machine</span></div>
   <div class="tile adapt"><b>12</b><span>à adapter, changement nommé</span></div>
   <div class="tile gen"><b>13</b><span>généralisables telles quelles</span></div>
-  <div class="tile gen"><b>6</b><span>décisions de l'auteur, le 2026-10-09</span></div>
+  <div class="tile gen"><b>7</b><span>décisions de l'auteur, le 2026-10-09</span></div>
   <div class="tile tech"><b>4</b><span>décisions techniques prises ici</span></div>
-  <div class="tile adapt"><b>1</b><span>question qui reste à l'auteur</span></div>
+  <div class="tile gen"><b>0</b><span>question encore ouverte</span></div>
 </div>
 
 <!-- ============================================================ 0 -->
@@ -829,7 +829,7 @@ plugin docpin, et des mécanismes à la place de la prose répétée.</div>
 <div class="answer"><strong>Note 2 — « audit là-dessus : on veut décrire ce comportement à Claude de manière
 efficace, sans rien en double ni en trop, évolutif »</strong> Le tableau ci-dessous cite chaque recouvrement
 avec ses passages ; le suivant donne, pièce par pièce, ce qu'elle devient. Rien n'a été modifié dans
-<code>~/.claude/</code> : c'est la question A1 de la section 11.</div>
+<code>~/.claude/</code> : la bascule est décidée (A1, section 11) et se fera quand le plugin existera.</div>
 <div class="l2">
 <div class="legend"><span class="n">contradiction</span><span class="w">doublon</span><span class="u">superflu</span><span class="y">sans contradiction</span></div>
 <div class="scroll"><table class="audit">
@@ -1264,26 +1264,25 @@ remplacerait. Aucune n'oblige à renoncer à l'invariant « aucune dépendance d
 </div>
 
 <!-- ============================================================ 11 -->
-<h2 id="decisions">11 · Décisions, et la question qui reste</h2>
-<div class="verdict"><strong>Affirmation :</strong> une seule question reste à l'auteur, sur sa propre config. Les
-six qu'il a tranchées le 2026-10-09 sont actées ; les quatre autres étaient techniques et sont tranchées ici,
-avec leur motif.</div>
-<div class="legend"><span><span class="tag adapt">à arbitrer</span> question pour l'auteur</span>
-<span><span class="tag gen">décidé par l'auteur</span> le 2026-10-09</span>
+<h2 id="decisions">11 · Décisions</h2>
+<div class="verdict"><strong>Affirmation :</strong> aucune question ne reste ouverte. Les sept que l'auteur a
+tranchées le 2026-10-09 sont actées ; les quatre autres étaient techniques et sont tranchées ici, avec leur
+motif.</div>
+<div class="legend"><span><span class="tag gen">décidé par l'auteur</span> le 2026-10-09</span>
 <span><span class="tag tech">décision technique</span> prise ici, motif écrit</span></div>
 
-<div class="dec open"><h3>A1 · Ta config de documentation passe-t-elle de 13 pièces à 8 ? <span class="tag adapt">à arbitrer</span></h3>
-<div class="what">D'accord pour que la manière de produire un document vive dans le plugin public que tu
-installes (Q9), et que ta config ne garde que tes préférences (français) et le pourquoi ?</div>
-<details class="l2"><summary>Les issues</summary>
+<div class="dec ali"><h3>A1 · Ta config de documentation passe de 13 pièces à 8 <span class="tag gen">décidé le 2026-10-09</span></h3>
+<div class="what">La manière de produire un document vivra dans le plugin public que l'auteur installe (Q9) ;
+sa config ne gardera que ses préférences (français) et le pourquoi. La bascule se fait quand le plugin
+existe ; d'ici là, rien ne change dans sa config.</div>
+<details class="l2"><summary>Les issues considérées</summary>
 <div class="scroll"><table>
 <thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
 <tbody>
-<tr><td>oui, quand le plugin existe</td><td>chaque règle écrite une fois ; tu utilises ce que tu livres</td><td>réécrire 3 fichiers de règles et le style « visuel d'abord » ; attendre le plugin</td></tr>
+<tr><td><b>oui, quand le plugin existe</b> — retenue</td><td>chaque règle écrite une fois ; tu utilises ce que tu livres</td><td>réécrire 3 fichiers de règles et le style « visuel d'abord » ; attendre le plugin</td></tr>
 <tr><td>oui, mais garder aussi tes règles complètes</td><td>rien à retirer</td><td>les doublons et les quatre seuils restent ; la contradiction Mermaid aussi</td></tr>
 <tr><td>non</td><td>rien ne bouge chez toi</td><td>le plugin public et ta config divergent dès la première correction</td></tr>
-</tbody></table></div></details>
-<div class="reco"><strong>Recommandation :</strong> oui, quand le plugin existe ; d'ici là, rien ne change dans ta config.</div></div>
+</tbody></table></div></details></div>
 
 <div class="dec ali"><h3>Q1 · Ce que contient le paquet public <span class="tag gen">décidé le 2026-10-09</span></h3>
 <div class="what">La boucle et un skill « documents annotables » dans le plugin docpin ; le style « visuel
