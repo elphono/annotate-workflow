@@ -232,6 +232,28 @@ try {
   await fits(390);
   step('still fits at 390 px');
 
+  // A daemon up to date shows no banner; one older than the page (it says
+  // neither `stale` nor any repository) gets the banner, and the sessions
+  // listed flat rather than under made-up folders.
+  if (await page.locator('#stale').isVisible()) fail('stale banner shown by a fresh daemon');
+  const old = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+  old.on('pageerror', (e) => errors.push(e.message));
+  await old.route('**/api/docs', async (route) => {
+    const data = await (await route.fetch()).json();
+    delete data.stale;
+    for (const group of data.sessions) {
+      for (const field of ['repo', 'repo_label', 'is_repo']) delete group[field];
+    }
+    await route.fulfill({ json: data });
+  });
+  await old.goto(base + '/');
+  await old.waitForSelector('#groups .group');
+  if (!(await old.locator('#stale').isVisible())) fail('no stale banner for an older daemon');
+  if (await old.locator('#groups .repo').count()) fail('repository sections made up for an older daemon');
+  if (!(await old.locator('#groups > .group').count())) fail('no session listed for an older daemon');
+  await old.close();
+  step('an older daemon: banner shown, sessions listed flat');
+
   if (errors.length) fail('page errors: ' + errors.join(' | '));
   step('no page error');
 } finally {

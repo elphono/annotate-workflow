@@ -487,3 +487,21 @@ def test_the_folder_field_is_offered_subfolders(daemon, tmp_path):
     from urllib.parse import quote
     body = daemon.request("GET", "/api/folders/suggest?path=" + quote(str(tmp_path / "pick") + "/"))[1]
     assert body["folders"] == [str((tmp_path / "pick" / "alpha").resolve())]
+
+
+def test_a_daemon_says_when_its_code_changed_on_disk_since_it_started(daemon, tmp_path):
+    # Measured 2026-10-09: the page (read from disk at every request) grouped
+    # by repository while the daemon, started the day before, still ran the
+    # Python that sent no repository, and the page drew wrong groups silently.
+    assert daemon.request("GET", "/api/docs")[1]["stale"] is False   # the real code, untouched
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "registry.py").write_text("x = 1\n")
+    daemon.srv.code_dir = code
+    daemon.srv.code_at_start = server.code_fingerprint(code)
+    assert daemon.request("GET", "/api/docs")[1]["stale"] is False
+    (code / "registry.py").write_text("x = 22\n")                      # an update lands
+    assert daemon.request("GET", "/api/docs")[1]["stale"] is True
+    (code / "registry.py").write_text("x = 1\n")
+    (code / "new_module.py").write_text("")                            # a module added
+    assert daemon.request("GET", "/api/docs")[1]["stale"] is True

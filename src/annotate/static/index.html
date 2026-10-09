@@ -69,6 +69,10 @@
   #daemon.down { color: var(--danger); }
   #daemon.down .dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
   .daemon-actions { display: flex; gap: 6px; }
+  .stale { background: var(--accent-soft); border-bottom: 1px solid var(--accent); color: var(--ink); }
+  .stale-inner { max-width: 1180px; margin: 0 auto; padding: 10px 16px; display: flex;
+                 flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 14px; }
+  .stale-inner span { flex: 1 1 280px; }
 
   /* -- buttons and fields ------------------------------------------------- */
   button { font: inherit; font-size: 13px; font-weight: 500; line-height: 1.2;
@@ -308,6 +312,13 @@
     </span>
   </div>
 </header>
+<div id="stale" class="stale" role="alert" hidden>
+  <div class="stale-inner">
+    <span><strong>The daemon runs older code than the one on disk.</strong>
+      This page may show less than it should until it restarts.</span>
+    <button type="button" id="stale-restart" class="primary">Restart daemon</button>
+  </div>
+</div>
 <main class="layout">
   <div class="content">
     <div id="overview" class="card" aria-label="Overview">

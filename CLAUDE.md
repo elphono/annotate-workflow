@@ -216,6 +216,13 @@ copie du dépôt et exige que la suite tombe.
   inertes qui portent le nom interdit.
 - **La session qui répond suit les règles globales de l'utilisateur** : elle commite, et
   pousse s'il y a un remote — y compris dans un dépôt d'équipe.
+- **La page se lit sur le disque à chaque requête, le Python du démon une seule fois** : après une
+  mise à jour, une page neuve parle à un démon ancien. Mesuré le 2026-10-09 : le regroupement par
+  dépôt, commité, dessinait de faux « Folder » parce que le démon, lancé la veille, n'envoyait aucun
+  dépôt. Le démon compare désormais l'empreinte de ses `.py` à celle du démarrage (`stale` dans
+  `/api/docs`) ; la page affiche alors un bandeau « Restart daemon », traite un démon qui ne dit pas
+  `stale` comme périmé, et se rabat sur une liste à plat plutôt que d'inventer des groupes.
+  `test_a_daemon_says_when_its_code_changed_on_disk_since_it_started`, `index_check.mjs`.
 - **Une correction après livraison vaut réponse** : le hook ré-enregistre le document à chaque
   écriture, et `registry.register` fait alors passer `delivered` à `answered`. La barre du
   navigateur compare de son côté la date du fichier et propose « Reload ».

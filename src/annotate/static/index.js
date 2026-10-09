@@ -36,6 +36,7 @@
   const groupsBox = $('groups');
   const daemonLine = $('daemon');
   const daemonText = daemonLine.querySelector('.text');
+  const staleBanner = $('stale');
   const toast = $('toast');
   const messageBox = $('message');
   const folderList = $('folder-list');
@@ -361,6 +362,10 @@
     lastData = data;
     daemonLine.className = 'up';
     daemonText.textContent = 'Daemon up on port ' + data.port;
+    // The page is read from disk at every request, the daemon's Python once:
+    // after an update, it is older than this page until restarted. A daemon
+    // that does not say `stale` at all predates the check, so it is too.
+    staleBanner.hidden = data.stale === false;
     renderOverview(data);
     if (busy || menuOpen() || picker.open) return;
     const key = JSON.stringify([data.docs, data.sessions, filterText, onlyPending, home,
@@ -381,6 +386,7 @@
     // most recent session; the documents without a known session come last.
     let shown = 0;
     const repos = new Map();
+    const items = [];                 // repository buckets, and cards with no repository known
     let unknown = null;
     for (const group of data.sessions || []) {
       const members = group.docs.map((id) => docs.get(id)).filter(Boolean)
@@ -391,17 +397,23 @@
         unknown = groupCard(group, members);
         continue;
       }
+      if (!('repo' in group)) {        // a daemon older than this page: no repository to name
+        items.push(groupCard(group, members));
+        continue;
+      }
       const key = group.repo || group.session_id;
       if (!repos.has(key)) {
         repos.set(key, { repo: { path: group.repo, label: group.repo_label || group.folder,
                                  is_repo: group.is_repo }, cards: [], documents: 0 });
+        items.push(repos.get(key));
       }
       const bucket = repos.get(key);
       bucket.cards.push(groupCard(group, members));
       bucket.documents += members.length;
     }
-    for (const bucket of repos.values()) {
-      groupsBox.append(repoSection(bucket.repo, bucket.cards, bucket.cards.length, bucket.documents));
+    for (const item of items) {
+      groupsBox.append(item instanceof Node ? item
+        : repoSection(item.repo, item.cards, item.cards.length, item.documents));
     }
     if (unknown) groupsBox.append(unknown);
     if (!shown) {
@@ -624,10 +636,12 @@
     }
   }
 
-  $('restart').addEventListener('click', (e) => act(e.currentTarget, async () => {
+  const restart = (e) => act(e.currentTarget, async () => {
     await call('POST', '/api/daemon/restart');
     return 'Restart asked to systemd: the page comes back in a few seconds.';
-  }));
+  });
+  $('restart').addEventListener('click', restart);
+  $('stale-restart').addEventListener('click', restart);
   $('stop').addEventListener('click', (e) => act(e.currentTarget, async () => {
     if (!confirm('Stop the daemon? This page will stop working until it is started again ' +
                  'from the tray icon (Daemon > start).')) return '';

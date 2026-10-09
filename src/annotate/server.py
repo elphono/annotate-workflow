@@ -6,7 +6,9 @@
     GET    /docs/<id>/files/<relative>       a file next to the document (images…)
     GET    /static/<name>                    annotate.js, annotate.css
     GET    /api/docs                         the registry, with annotation counts, grouped
-                                             by session (`open`: a live process of it)
+                                             by session (`open`: a live process of it) and
+                                             by repository; `stale`: the code on disk
+                                             changed since the daemon started
     GET    /api/docs/<id>                    one entry
     GET    /api/docs/<id>/annotations        the annotations
     PUT    /api/docs/<id>/annotations        replace them (status -> annotated)
@@ -93,6 +95,24 @@ def contained_file(folder: Path, relative: str) -> Path:
     return target
 
 
+CODE_DIR = Path(__file__).resolve().parent
+
+
+def code_fingerprint(folder: Path) -> tuple[tuple[str, int, int], ...]:
+    """Name, size and date of every module of `folder`: what tells a daemon
+    its Python changed on disk since it started. The page and the overlay are
+    read from disk at every request, the Python once: after an update, a new
+    page met an old daemon and drew wrong groups without a word (2026-10-09)."""
+    found = []
+    for path in sorted(folder.glob("*.py")):
+        try:
+            info = path.stat()
+        except OSError:
+            continue
+        found.append((path.name, info.st_size, info.st_mtime_ns))
+    return tuple(found)
+
+
 class AnnotateServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -103,6 +123,13 @@ class AnnotateServer(ThreadingHTTPServer):
         self.sender = send
         self.wait_hold = WAIT_HOLD
         self.catchups = scanner.CatchUps()
+        self.code_dir = CODE_DIR
+        self.code_at_start = code_fingerprint(self.code_dir)
+
+    @property
+    def stale(self) -> bool:
+        """True once the code on disk is no longer the code this daemon runs."""
+        return code_fingerprint(self.code_dir) != self.code_at_start
 
     @property
     def port(self) -> int:
@@ -339,7 +366,7 @@ class Handler(BaseHTTPRequestHandler):
             for group in groups:
                 group["open"] = group["session_id"] in open_ids
             return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs,
-                                              "sessions": groups})
+                                              "sessions": groups, "stale": self.server.stale})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
         if len(rest) > 2:
             raise Refused(HTTPStatus.NOT_FOUND, "not found")
