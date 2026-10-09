@@ -179,6 +179,21 @@ def _default_cwd(path: Path) -> Path:
     return path.parent
 
 
+def repository_of(cwd: Path) -> tuple[Path, bool]:
+    """The git repository `cwd` lies in, and True; or `cwd` itself and False.
+
+    A `.git` file (a linked worktree) counts as much as a `.git` folder. The
+    walk stops below the home directory: a dotfiles repository there would
+    otherwise swallow every session run outside a project."""
+    home = Path.home()
+    for folder in [cwd, *cwd.parents]:
+        if folder == home:
+            break
+        if (folder / ".git").exists():
+            return folder, True
+    return cwd, False
+
+
 WORKTREES = "/.claude/worktrees/"
 
 
@@ -454,7 +469,12 @@ def group_by_session(docs: list[dict[str, Any]], title_of: Any,
 
     `label` is what the user reads: the session's title (`title_of(id)`, its
     /rename title or the one Claude Code generated), then the folder it works
-    in, relative to the workspace."""
+    in, relative to the workspace.
+
+    `repo` is the repository that folder lies in (`repository_of`), so that the
+    page can gather the sessions of one repository; `repo_label` names it
+    relative to the workspace, or by its name outside it; `is_repo` is False
+    for a folder that no repository holds."""
     groups: dict[str, dict[str, Any]] = {}
     for doc in docs:                       # already newest first
         key = doc.get("session_id") or ""
@@ -465,12 +485,18 @@ def group_by_session(docs: list[dict[str, Any]], title_of: Any,
                 folder = str(cwd.relative_to(root)) if cwd.is_absolute() else ""
             except ValueError:
                 folder = cwd.name
+            repo, is_repo = repository_of(cwd) if key and cwd.is_absolute() else (None, False)
+            try:
+                repo_label = str(repo.relative_to(root)) if repo else ""
+            except ValueError:
+                repo_label = repo.name if repo else ""
             name = (title_of(key) if key else "") or (
                 f"session {key[:8]}" if key else "documents without a known session")
             group = groups[key] = {
                 "session_id": key, "title": name, "folder": folder if key else "",
                 "label": f"{name} · {folder}" if key and folder else name,
-                "docs": []}
+                "repo": str(repo) if repo else "", "repo_label": repo_label or str(repo or ""),
+                "is_repo": is_repo, "docs": []}
         group["docs"].append(doc["id"])
     known = [g for k, g in groups.items() if k]
     return known + ([groups[""]] if "" in groups else [])

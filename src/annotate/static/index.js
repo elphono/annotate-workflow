@@ -247,6 +247,8 @@
     folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     id: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
     doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+    repo: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/>'
+      + '<path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/>',
   };
 
   function icon(name) {
@@ -277,17 +279,41 @@
     if (group.open) kicker.title = 'The session is open: Send to session posts into it';
     const meta = make('div', 'group-meta');
     if (known) {
-      const folder = docs.length && docs[0].cwd ? tilde(docs[0].cwd) : group.folder;
-      if (folder) meta.append(chip('folder', folder, 'mono', 'The folder the session runs in'));
+      // The repository section above already names the folder; only a session
+      // run in a subfolder of it says which one.
+      const cwd = docs.length ? docs[0].cwd || '' : '';
+      const repo = group.repo || '';
+      const folder = cwd && repo && cwd.startsWith(repo + '/') ? cwd.slice(repo.length + 1)
+        : cwd && cwd !== repo ? tilde(cwd) : '';
+      if (folder) meta.append(chip('folder', folder, 'mono', 'The folder the session runs in: ' + cwd));
       meta.append(chip('id', group.session_id.slice(0, 8), 'mono', group.session_id));
       meta.append(chip('doc', plural(docs.length, 'document')));
     } else {
       meta.textContent = 'Attach each one to its conversation: otherwise Send to session ' +
         'opens a new one.';
     }
-    head.append(badge, kicker, make('h2', '', group.title), meta);
+    head.append(badge, kicker, make('h3', '', group.title), meta);
     section.append(head);
     for (const doc of docs) section.append(docRow(doc));
+    return section;
+  }
+
+  function repoSection(repo, cards, sessions, documents) {
+    const section = make('section', 'repo' + (repo.is_repo ? '' : ' plain'));
+    section.dataset.repo = repo.path;
+    const head = make('header', 'repo-head');
+    const mark = make('span', 'repo-icon');
+    mark.append(icon(repo.is_repo ? 'repo' : 'folder'));
+    const name = make('h2', '', repo.label);
+    name.title = repo.path;
+    const kicker = make('span', 'repo-kicker', repo.is_repo ? 'Repository' : 'Folder');
+    if (!repo.is_repo) kicker.title = 'No git repository holds this folder';
+    const facts = make('span', 'repo-facts',
+      plural(sessions, 'session') + ' · ' + plural(documents, 'document'));
+    head.append(mark, kicker, name, facts);
+    const body = make('div', 'repo-sessions');
+    body.append(...cards);
+    section.append(head, body);
     return section;
   }
 
@@ -326,7 +352,8 @@
   function visible(doc, group) {
     if (onlyPending && !doc.pending) return false;
     if (!filterText) return true;
-    const text = [doc.title, doc.path, group.title, group.session_id].join(' ').toLowerCase();
+    const text = [doc.title, doc.path, group.title, group.session_id, group.repo_label]
+      .join(' ').toLowerCase();
     return filterText.split(/\s+/).every((word) => text.includes(word));
   }
 
@@ -350,14 +377,33 @@
         'Written before the daemon started? Rescan all folders, in the side panel.'));
       return;
     }
+    // Sessions gathered by the repository they work in, in the order of their
+    // most recent session; the documents without a known session come last.
     let shown = 0;
+    const repos = new Map();
+    let unknown = null;
     for (const group of data.sessions || []) {
       const members = group.docs.map((id) => docs.get(id)).filter(Boolean)
         .filter((doc) => visible(doc, group));
       if (!members.length) continue;
       shown += members.length;
-      groupsBox.append(groupCard(group, members));
+      if (!group.session_id) {
+        unknown = groupCard(group, members);
+        continue;
+      }
+      const key = group.repo || group.session_id;
+      if (!repos.has(key)) {
+        repos.set(key, { repo: { path: group.repo, label: group.repo_label || group.folder,
+                                 is_repo: group.is_repo }, cards: [], documents: 0 });
+      }
+      const bucket = repos.get(key);
+      bucket.cards.push(groupCard(group, members));
+      bucket.documents += members.length;
     }
+    for (const bucket of repos.values()) {
+      groupsBox.append(repoSection(bucket.repo, bucket.cards, bucket.cards.length, bucket.documents));
+    }
+    if (unknown) groupsBox.append(unknown);
     if (!shown) {
       const reset = plain('Show every document', '', '', () => {
         filterInput.value = '';

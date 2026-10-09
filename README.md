@@ -101,7 +101,8 @@ stays out until it is written again.
 4. **Send to session** (the bar, the home page, the tray, or `annotate send <id>`). Only notes that were
    never sent go out.
 
-The home page groups documents by session — its title, then its folder — and carries every control:
+The home page groups documents by session — its title, then its folder — and the sessions by the
+git repository they run in; it carries every control:
 Open, Send to session, New session, Unmanage, Delete file; the tracked folders and the rescan; and
 Restart / Stop for the daemon. **Attach to session…** ties a document to any conversation of the
 machine that `claude --resume` can find (open ones first, filter as you type); **Detach** unties it.

@@ -144,6 +144,48 @@ def test_documents_are_grouped_by_session_newest_group_first(make_doc, tmp_path)
     assert groups[2]["docs"] == [b["id"]] and c["id"] in groups[1]["docs"]
 
 
+def test_each_session_group_names_the_repository_it_works_in(make_doc, tmp_path):
+    root = tmp_path / "workspace"
+    repo = root / "team" / "backend"
+    (repo / ".git").mkdir(parents=True)
+    (repo / "sub").mkdir()
+    linked = root / "linked"                               # a git worktree: .git is a file
+    linked.mkdir()
+    (linked / ".git").write_text("gitdir: elsewhere")
+    plain = root / "team"                                  # holds a repo, is not one
+    sessions = {"s-root": repo, "s-sub": repo / "sub", "s-linked": linked, "s-plain": plain}
+    for session, cwd in sessions.items():
+        registry.register(make_doc("<p>x</p>", name=f"{session}.html"), session=session, cwd=cwd)
+    registry.register(make_doc("<p>y</p>", name="none.html"), session="")
+    groups = {g["session_id"]: g for g in
+              registry.group_by_session(registry.summary(), lambda s: "", root)}
+    assert groups["s-root"]["repo"] == groups["s-sub"]["repo"] == str(repo)
+    assert groups["s-root"]["repo_label"] == "team/backend" and groups["s-root"]["is_repo"]
+    assert groups["s-sub"]["folder"] == "team/backend/sub"     # the session's own folder stays
+    assert groups["s-linked"]["repo"] == str(linked) and groups["s-linked"]["is_repo"]
+    assert groups["s-plain"]["repo"] == str(plain) and not groups["s-plain"]["is_repo"]
+    assert groups["s-plain"]["repo_label"] == "team"
+    assert groups[""]["repo"] == "" and not groups[""]["is_repo"]
+
+
+def test_a_repository_outside_the_workspace_is_labelled_by_its_name(make_doc, tmp_path):
+    repo = tmp_path / "elsewhere" / "tool"
+    (repo / ".git").mkdir(parents=True)
+    registry.register(make_doc("<p>x</p>"), session="s1", cwd=repo)
+    group = registry.group_by_session(registry.summary(), lambda s: "", tmp_path / "ws")[0]
+    assert group["repo"] == str(repo) and group["repo_label"] == "tool"
+
+
+def test_a_repository_in_the_home_directory_holds_no_session(make_doc, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".git").mkdir()                            # a dotfiles repository
+    notes = tmp_path / "notes"
+    notes.mkdir()
+    registry.register(make_doc("<p>x</p>"), session="s1", cwd=notes)
+    group = registry.group_by_session(registry.summary(), lambda s: "", tmp_path / "ws")[0]
+    assert group["repo"] == str(notes) and not group["is_repo"]
+
+
 def test_an_agent_worktree_is_never_kept_as_the_session_folder(make_doc, tmp_path):
     path = make_doc("<p>x</p>")
     repo = path.parent.parent

@@ -79,6 +79,10 @@ d'abord, au plus `SESSION_LIMIT` = 50), et `registry.attach` refuse en 400 un id
 **La pastille et la page d'accueil classent les documents par session** : le titre de la
 session (son `/rename`, sinon celui que Claude Code a généré, lus dans le transcript, de façon
 incrémentale) et son dossier ; les documents sans session connue viennent en dernier.
+**La page d'accueil range en outre les sessions par dépôt** (2026-10-09) : le dépôt git qui
+contient le dossier où la session tourne (`registry.repository_of`, `.git` dossier ou fichier,
+jamais au-dessus du home), sinon ce dossier lui-même, présenté comme « Folder ». C'est le dossier
+de la **session** qui compte, pas celui du document.
 
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
 `docs/etude-reutilisation.html`.
@@ -157,6 +161,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | un rescan ne prend que les N derniers jours, un à la fois, et ne ramène pas un document oublié | `test_a_catch_up_takes_the_recent_window_only`, `test_one_catch_up_at_a_time_and_the_last_one_is_reported`, `test_an_unmanaged_document_stays_out_of_a_catch_up_until_written_again` |
 | un document ne se rattache qu'à une conversation que `claude --resume` trouverait ; le rattachement écrit `session_id`, sans toucher au statut ni garder un worktree disparu | `test_attaching_a_document_writes_its_session_and_moves_it_to_that_group`, `test_a_session_this_machine_cannot_resume_is_refused_with_a_400`, `test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder` |
 | la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |
+| une session se range sous le dépôt qui contient son dossier (sous-dossier et worktree compris), jamais sous un dépôt du home ; les sessions d'un dépôt se regroupent, les documents sans session restent à part, en dernier | `test_each_session_group_names_the_repository_it_works_in`, `test_a_repository_in_the_home_directory_holds_no_session`, `tests/browser/index_check.mjs` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 

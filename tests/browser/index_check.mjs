@@ -30,11 +30,33 @@ try {
   await page.waitForSelector('section .doc');
   await page.waitForFunction(() => document.querySelectorAll('.doc').length === 5);
 
-  const heads = await page.locator('#groups section h2').allTextContents();
-  if (heads.length !== 3 || !heads.includes('Live session') || !heads.includes('Other session') ||
-      heads[2] !== 'documents without a known session') fail('groups: ' + JSON.stringify(heads));
+  const heads = await page.locator('#groups .group h3').allTextContents();
+  if (heads.length !== 4 || !heads.includes('Live session') || !heads.includes('Other session') ||
+      !heads.includes('session s-untitl') || heads[3] !== 'documents without a known session') {
+    fail('groups: ' + JSON.stringify(heads));
+  }
   step('grouped by session, unknown last: ' + JSON.stringify(heads));
-  const group = (title) => page.locator('#groups section', { has: page.locator('h2', { hasText: title }) });
+  const group = (title) => page.locator('#groups .group', { has: page.locator('h3', { hasText: title }) });
+  // Sessions gathered by repository: Live session and the untitled one (run
+  // in `repo/sub`) in the git repository `repo`, Other session in `other`, a
+  // folder no repository holds; the documents without a session after both,
+  // in no repository section. Registered within the same second, the groups
+  // may come in either order: the comparison is sorted.
+  const repos = (await page.locator('#groups > .repo').evaluateAll((nodes) => nodes.map((n) => [
+    n.querySelector('h2').textContent, n.querySelector('.repo-kicker').textContent,
+    [...n.querySelectorAll('.group h3')].map((h) => h.textContent).sort()]))).sort();
+  if (JSON.stringify(repos) !== JSON.stringify([['other', 'Folder', ['Other session']],
+    ['repo', 'Repository', ['Live session', 'session s-untitl']]])) {
+    fail('repository sections: ' + JSON.stringify(repos));
+  }
+  const chips = async (title) => group(title).locator('.chip').allTextContents();
+  if (!(await chips('session s-untitl')).includes('sub') ||
+      (await chips('Live session')).some((text) => text.includes('repo'))) {
+    fail('folder chips: ' + JSON.stringify([await chips('session s-untitl'), await chips('Live session')]));
+  }
+  const last = await page.locator('#groups > *').last().evaluate((n) => n.matches('.group.unknown'));
+  if (!last) fail('the documents without a session are not last, outside the repositories');
+  step('sessions gathered by repository: ' + JSON.stringify(repos));
   const row = (title) => page.locator('.doc', { hasText: title });
   const kicker = async (title) => (await group(title).locator('.group-kicker').textContent()).trim();
   if (await kicker('Live session') !== 'Open session' ||
@@ -122,8 +144,8 @@ try {
   step('the picker filters on folder, start of id and title');
   await page.locator('#picker-search').press('Enter');
   await page.waitForFunction(() => !document.getElementById('picker').open);
-  await page.waitForFunction(() => [...document.querySelectorAll('#groups section')].some((s) =>
-    s.querySelector('h2').textContent === 'Other session' && s.textContent.includes('Bravo')));
+  await page.waitForFunction(() => [...document.querySelectorAll('#groups .group')].some((s) =>
+    s.querySelector('h3').textContent === 'Other session' && s.textContent.includes('Bravo')));
   const attached = await page.locator('#message').textContent();
   if (!attached.startsWith('Bravo attached to Other session')) fail('attach message: ' + attached);
   step('Enter attached Bravo, which moved to Other session: ' + attached);
@@ -145,14 +167,14 @@ try {
   await page.waitForSelector('#picker[open] .option');
   await page.locator('#picker-detach').click();
   await page.waitForFunction(() => !document.getElementById('picker').open);
-  await page.waitForFunction(() => [...document.querySelectorAll('#groups section')].some((s) =>
-    s.querySelector('h2').textContent === 'documents without a known session' && s.textContent.includes('Charlie')));
+  await page.waitForFunction(() => [...document.querySelectorAll('#groups .group')].some((s) =>
+    s.querySelector('h3').textContent === 'documents without a known session' && s.textContent.includes('Charlie')));
   step('Detach from the picker: ' + (await page.locator('#message').textContent()));
 
   await row('Bravo').locator('summary.more-toggle').click();
   await row('Bravo').getByRole('button', { name: 'Detach' }).click();
-  await page.waitForFunction(() => [...document.querySelectorAll('#groups section')].some((s) =>
-    s.querySelector('h2').textContent === 'documents without a known session' && s.textContent.includes('Bravo')));
+  await page.waitForFunction(() => [...document.querySelectorAll('#groups .group')].some((s) =>
+    s.querySelector('h3').textContent === 'documents without a known session' && s.textContent.includes('Bravo')));
   step('Detach: ' + (await page.locator('#message').textContent()));
 
   await row('Alpha').getByRole('button', { name: 'Send to session' }).click();

@@ -114,6 +114,7 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     conversation(projects, "s-live", cwd=str(ws / "repo"), title="Live session", when=now - 120)
     conversation(projects, "s-other", cwd=str(ws / "other"), title="Other session",
                  when=now - 3 * 3600)
+    (ws / "other").mkdir(parents=True)                # a folder no git repository holds
     conversation(projects, "s-untitled", cwd=str(ws / "third"), when=now - 2 * 86400)
     conversation(projects, "agent-sub1", folder="-x/s-live/subagents", title="A subagent",
                  when=now)
@@ -128,13 +129,14 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     charlie_path = make_doc("<p>c</p>", name="c.html", title="Charlie")
     charlie = registry.register(charlie_path, session="s-live")["id"]
     echo = registry.register(make_doc("<p>e</p>", name="e.html", title="Echo"),
-                             session="s-other")["id"]
+                             session="s-other", cwd=ws / "other")["id"]
     registry.replace_annotations(echo, [{"id": "e1", "selector": "body", "quote": "e",
                                          "note": "already sent"}])
     registry.mark_sent(echo, ["e1"], registry.now_iso())
     registry.update(echo, status="delivered")
     foxtrot_path = make_doc("<p>f</p>", name="f.html", title="Foxtrot")
-    foxtrot = registry.register(foxtrot_path, session="s-other")["id"]
+    (ws / "repo" / "sub").mkdir(parents=True)        # a second session of the repository `repo`
+    foxtrot = registry.register(foxtrot_path, session="s-untitled", cwd=ws / "repo" / "sub")["id"]
     foxtrot_path.unlink()
     registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
                                           "note": "from the index page"}])
